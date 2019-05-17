@@ -114,7 +114,7 @@ func crawl(args *Args) {
 	c.OnHTML("*", func(e *colly.HTMLElement) {
 		switch e.Name {
 		case "svg", "img", "h1", "h2", "h3", "li", "button":
-		case "section", "nav", "header", "article", "main":
+		case "section", "nav", "header", "article", "main", "blockquote":
 			om = appendHtml(om, e, e.Name)
 		}
 	})
@@ -141,17 +141,21 @@ func crawl(args *Args) {
 			case "html", "head", "script", "style", "noscript", "path", "defs", "symbol", "clipPath":
 			case "svg", "use", "circle", "rect", "text", "g", "image", "ul", "li", "section", "nav":
 			case "header", "div", "span", "button", "main", "article", "img", "h1", "h2", "h3", "p":
-			case "form":
+			case "form", "select", "option", "h4", "desc", "time", "br", "aside", "input", "label":
 				// Do nothing
 			default:
-				//fmt.Printf("\t[%d] %s: %s\n",e.Index, e.Name, e.Text)
+				fmt.Printf("\t[%d] %s: %s\n", e.Index, e.Name, e.Text)
 				noop()
 			}
 		}
 	})
 
 	c.OnRequest(func(r *colly.Request) {
-		fmt.Println("Visiting", cleanurl(r.URL.String()))
+		u := cleanurl(r.URL.String())
+		if u == "https://www.mckissock.com/appraisal/continuing-education/essential-elements-of-disclosures-and-disclaimers/" {
+			noop()
+		}
+		fmt.Println("Visiting", u)
 	})
 
 	c.OnScraped(func(response *colly.Response) {
@@ -159,6 +163,9 @@ func crawl(args *Args) {
 			hash := sha256.Sum256([]byte(response.Request.URL.Path))
 			id := hashToString(hash)
 			if len(om[id]) <= 1 {
+				o := om[id]
+				noop(o)
+				log.Println(len(string(response.Body)))
 				break
 			}
 			om[id]["objectID"] = id
@@ -166,7 +173,6 @@ func crawl(args *Args) {
 			if err != nil {
 				log.Printf("ERROR: %s", err.Error())
 			}
-			om[id] = make(Object, 0)
 		}
 	})
 
