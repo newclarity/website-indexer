@@ -3,7 +3,7 @@ package main
 import (
 	"bytes"
 	"colibri-crawler/only"
-	"crypto/sha1"
+	"crypto/sha256"
 	"fmt"
 	"github.com/algolia/algoliasearch-client-go/algoliasearch"
 	"github.com/gocolly/colly"
@@ -76,7 +76,7 @@ func getHtml(e *colly.HTMLElement) (h string) {
 }
 
 func getId(om ObjectMap, e *colly.HTMLElement) string {
-	hash := sha1.Sum([]byte(e.Request.URL.Path))
+	hash := sha256.Sum256([]byte(e.Request.URL.Path))
 	id := hashToString(hash)
 	if _, ok := om[id]; !ok {
 		om[id] = make(Object, 0)
@@ -156,11 +156,11 @@ func crawl(args *Args) {
 
 	c.OnScraped(func(response *colly.Response) {
 		for range only.Once {
-			hash := sha1.Sum([]byte(response.Request.URL.Path))
+			hash := sha256.Sum256([]byte(response.Request.URL.Path))
 			id := hashToString(hash)
-			//if len(om[id]) <= 1 {
-			//	break
-			//}
+			if len(om[id]) <= 1 {
+				break
+			}
 			om[id]["objectID"] = id
 			_, err := index.AddObject(om[id])
 			if err != nil {
@@ -176,8 +176,8 @@ func crawl(args *Args) {
 	}
 }
 
-func hashToString(hash [sha1.Size]byte) string {
-	h := sha1.New()
+func hashToString(hash [sha256.Size]byte) string {
+	h := sha256.New()
 	h.Write(hash[:])
 	bs := h.Sum(nil)
 	sh := string(fmt.Sprintf("%x", bs))
