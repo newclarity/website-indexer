@@ -113,7 +113,7 @@ func crawl(args *Args) {
 
 	c.OnHTML("*", func(e *colly.HTMLElement) {
 		switch e.Name {
-		case "svg", "img", "h1", "h2", "h3", "li", "button":
+		case "svg", "img", "h1", "h2", "h3", "h4", "h5", "li", "button", "b", "strong", "i", "em":
 		case "section", "nav", "header", "article", "main", "blockquote":
 			om = appendHtml(om, e, e.Name)
 		}
@@ -139,9 +139,10 @@ func crawl(args *Args) {
 		default:
 			switch e.Name {
 			case "html", "head", "script", "style", "noscript", "path", "defs", "symbol", "clipPath":
-			case "svg", "use", "circle", "rect", "text", "g", "image", "ul", "li", "section", "nav":
-			case "header", "div", "span", "button", "main", "article", "img", "h1", "h2", "h3", "p":
-			case "form", "select", "option", "h4", "desc", "time", "br", "aside", "input", "label":
+			case "svg", "use", "circle", "rect", "text", "g", "image", "ul", "ol", "li", "section", "nav":
+			case "header", "div", "span", "button", "main", "article", "img", "h1", "h2", "h3", "h4", "h5", "p":
+			case "form", "select", "option", "desc", "time", "br", "aside", "input", "label", "footer":
+			case "o:p", "hr", "font", "i", "em", "b", "strong", "table", "tbody", "td", "tr", "figure", "blockquote":
 				// Do nothing
 			default:
 				fmt.Printf("\t[%d] %s: %s\n", e.Index, e.Name, e.Text)
