@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"colibri-crawler/only"
+	"crypto/sha1"
 	"fmt"
 	"github.com/algolia/algoliasearch-client-go/algoliasearch"
 	"github.com/gocolly/colly"
@@ -74,21 +75,23 @@ func getHtml(e *colly.HTMLElement) (h string) {
 	return h
 }
 
-func getPath(om ObjectMap, e *colly.HTMLElement) string {
-	p := e.Request.URL.Path
-	if _, ok := om[p]; !ok {
-		om[p] = make(Object, 0)
+func getId(om ObjectMap, e *colly.HTMLElement) string {
+	hash := sha1.Sum([]byte(e.Request.URL.Path))
+	id := hashToString(hash)
+	if _, ok := om[id]; !ok {
+		om[id] = make(Object, 0)
+		om[id]["urlpath"] = e.Request.URL.Path
 	}
-	return p
+	return id
 }
 
 func appendHtml(om ObjectMap, e *colly.HTMLElement, k string) ObjectMap {
-	p := getPath(om, e)
-	_, ok := om[p][k]
+	id := getId(om, e)
+	_, ok := om[id][k]
 	if !ok {
-		om[p][k] = make([]string, 0)
+		om[id][k] = make([]string, 0)
 	}
-	om[p][k] = append(om[p][k].([]string), getHtml(e))
+	om[id][k] = append(om[id][k].([]string), getHtml(e))
 	return om
 }
 
@@ -117,18 +120,22 @@ func crawl(args *Args) {
 	})
 
 	c.OnHTML("*", func(e *colly.HTMLElement) {
-		p := getPath(om, e)
+		id := getId(om, e)
+		if _, ok := om[id]["urlpath"]; !ok {
+			om[id]["urlpath"] = e.Request.URL.Path
+		}
+
 		switch e.Name {
 		case "a":
-			onA(om[p], e)
+			onA(om[id], e)
 		case "title":
-			onTitle(om[p], e)
+			onTitle(om[id], e)
 		case "link":
-			onLink(om[p], e)
+			onLink(om[id], e)
 		case "meta":
-			onMeta(om[p], e)
+			onMeta(om[id], e)
 		case "body":
-			om[p]["body"] = getHtml(e)
+			om[id]["body"] = getHtml(e)
 		default:
 			switch e.Name {
 			case "html", "head", "script", "style", "noscript", "path", "defs", "symbol", "clipPath":
@@ -148,18 +155,33 @@ func crawl(args *Args) {
 	})
 
 	c.OnScraped(func(response *colly.Response) {
-		p := response.Request.URL.Path
-		_,err := index.AddObject(om[p])
-		if err != nil {
-			log.Printf("ERROR: %s", err.Error())
+		for range only.Once {
+			hash := sha1.Sum([]byte(response.Request.URL.Path))
+			id := hashToString(hash)
+			//if len(om[id]) <= 1 {
+			//	break
+			//}
+			om[id]["objectID"] = id
+			_, err := index.AddObject(om[id])
+			if err != nil {
+				log.Printf("ERROR: %s", err.Error())
+			}
+			om[id] = make(Object, 0)
 		}
-		om[p] = make(Object, 0)
 	})
 
 	err = c.Visit(fmt.Sprintf("https://www.%s/", args.Domain))
 	if err != nil {
 		log.Printf("ERROR: %s", err.Error())
 	}
+}
+
+func hashToString(hash [sha1.Size]byte) string {
+	h := sha1.New()
+	h.Write(hash[:])
+	bs := h.Sum(nil)
+	sh := string(fmt.Sprintf("%x", bs))
+	return sh
 }
 
 func onLink(o Object, e *colly.HTMLElement) {
