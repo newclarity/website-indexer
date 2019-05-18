@@ -1,1 +1,1 @@
-# algolia-site-indexer
+# website-indexer
