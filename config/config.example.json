@@ -12,6 +12,9 @@
       "li",
       "title"
    ],
+   "url_patterns": [
+      "/{profession}/{edu_type}/{state}/{course}"
+   ],
    "elements": {
       "meta": [
          "description"

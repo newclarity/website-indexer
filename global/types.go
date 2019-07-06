@@ -11,6 +11,7 @@ type Index = algoliasearch.Index
 
 type ObjectMap = map[string]Object
 
+type StringMap = map[string]string
 type Strings = []string
 
 type ElemsType = string
@@ -19,16 +20,16 @@ type ElemsTypeIndex = map[ElemsType]Strings
 type LookupMap = map[string]bool
 type LookupIndex = map[ElemsType]LookupMap
 
-type HTMLElement = colly.HTMLElement
+type HtmlElement = colly.HTMLElement
 
 type (
+	Url      = string
+	UrlPath  = string
 	Dir      = string
 	Path     = string
 	Filepath = string
 	Entry    = string
-)
 
-type IndexHoster interface {
-	Initialize() error
-	IndexObject(Object)
-}
+	HtmlName = string
+	Content  = string
+)

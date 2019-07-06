@@ -1,7 +1,6 @@
 package crawler
 
 import (
-	"crypto/sha256"
 	"fmt"
 	"github.com/gearboxworks/go-status/only"
 	"github.com/gocolly/colly"
@@ -9,14 +8,16 @@ import (
 	"time"
 	"website-indexer/config"
 	"website-indexer/global"
+	"website-indexer/hosters"
 	"website-indexer/hosters/algolia"
+	"website-indexer/pages"
 	"website-indexer/util"
 )
 
 type Crawler struct {
 	*config.Config
 	Collector *colly.Collector
-	Host      global.IndexHoster
+	Host      hosters.IndexHoster
 }
 
 func NewCrawler(cfg *config.Config) (c *Crawler) {
@@ -29,7 +30,7 @@ func NewCrawler(cfg *config.Config) (c *Crawler) {
 			),
 		}
 		err := c.Collector.Limit(&colly.LimitRule{
-			Delay: 1 * time.Second,
+			Delay: 250 * time.Millisecond,
 		})
 		if err == nil {
 			break
@@ -45,11 +46,12 @@ func NewCrawler(cfg *config.Config) (c *Crawler) {
 func (me *Crawler) Crawl() {
 	cfg := me.Config
 
-	om := make(global.ObjectMap, 0)
+	pb := pages.NewBuffer()
+
 	host := algolia.NewAlgolia(cfg)
 	noop(host)
 
-	me.Collector.OnHTML("*", func(e *global.HTMLElement) {
+	me.Collector.OnHTML("*", func(e *global.HtmlElement) {
 		for range only.Once {
 			if me.HasElementName(e, global.IgnoreElemsType) {
 				break
@@ -57,34 +59,34 @@ func (me *Crawler) Crawl() {
 			if !me.HasElementName(e, global.CollectElemsType) {
 				break
 			}
-			om = util.AppendHtml(om, e, e.Name)
+			p := pages.NewPage(e.Request.URL.Path)
+			pb.MaybeMapPage(p).AppendHtml(e)
 		}
 	})
 
-	me.Collector.OnHTML("*", func(e *global.HTMLElement) {
+	me.Collector.OnHTML("*", func(e *global.HtmlElement) {
 		for range only.Once {
 			if me.HasElementName(e, global.IgnoreElemsType) {
 				break
 			}
-			p := util.GetPage(om, e)
-
-			if _, ok := om[p]["urlpath"].(string); !ok {
-				om[p]["urlpath"] = e.Request.URL.Path
+			p := pb.GetByUrl(e.Request.URL.Path)
+			if p == nil {
+				pb.MaybeMapPage(pages.NewPage(e.Request.URL.Path))
 			}
 
 			switch e.Name {
 			case "a":
-				me.onA(om[p], e)
+				me.onA(p, e)
 			case "iframe":
-				me.onIFrame(om[p], e)
+				me.onIFrame(p, e)
 			case "title":
-				me.onTitle(om[p], e)
+				me.onTitle(p, e)
 			case "link":
-				me.onLink(om[p], e)
+				me.onLink(p, e)
 			case "meta":
-				me.onMeta(om[p], e)
+				me.onMeta(p, e)
 			case "body":
-				me.onBody(om[p], e)
+				me.onBody(p, e)
 			default:
 				logrus.Warnf("Unhandled HTML element <%s> in %s: %s",
 					e.Name,
@@ -96,25 +98,44 @@ func (me *Crawler) Crawl() {
 	})
 
 	me.Collector.OnRequest(func(r *colly.Request) {
-		fmt.Println("Visiting", util.Cleanurl(r.URL.String()))
+		fmt.Print("\nVisiting ", util.Cleanurl(r.URL.String()))
 	})
 
-	me.Collector.OnScraped(func(response *colly.Response) {
+	me.Collector.OnScraped(func(r *colly.Response) {
 		for range only.Once {
-			hash := sha256.Sum256([]byte(response.Request.URL.Path))
-			p := util.HashToString(hash)
-			if len(om[p]) <= 1 {
-				logrus.Warnf("No attributes collected for %s", response.Request.URL.Path)
+			up := r.Request.URL.Path
+			p := pb.GetByUrl(up)
+			if p == nil {
+				logrus.Warnf("No attributes collected for %s", up)
 				break
 			}
-			om[p]["id"] = p
-			host.IndexObject(om[p])
+			if !host.IndexPage(p) {
+				break
+			}
+			// Reset pause
+			me.Config.OnErrPause = config.InitialPause
 		}
 	})
 
 	u := fmt.Sprintf("https://www.%s/", cfg.Domain)
 	err := me.Collector.Visit(u)
 	if err != nil {
-		logrus.Errorf("On queuing visit to %s: %s", u, err)
+		me.Config.OnFailedVisit(err, u, "queuing visit", true)
+	}
+}
+func (me *Crawler) RequestVisit(u string, e *global.HtmlElement) {
+	for range only.Once {
+		err := e.Request.Visit(u)
+		if err != nil {
+			switch err.Error() {
+			case "URL already visited":
+			case "Forbidden domain":
+			case "Missing URL":
+			case "Not Found":
+				break
+			default:
+				logrus.Errorf("On <%s>: %s", e.Name, err)
+			}
+		}
 	}
 }

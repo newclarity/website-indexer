@@ -10,12 +10,24 @@ import (
 	"os"
 	"regexp"
 	"runtime"
+	"strings"
+	"time"
 	"website-indexer/global"
 	"website-indexer/util"
 )
 
-const Dir = "~/.config/website-indexer"
-const Filename = "config.json"
+const (
+	Dir      = "~/.config/website-indexer"
+	Filename = "config.json"
+)
+const (
+	InitialPause  time.Duration = 1 * time.Second
+	PauseIncrease float64       = 1.1
+)
+const (
+	TimeoutErr      = "net/http: request canceled while waiting for connection (Client.Timeout exceeded while awaiting headers)"
+	UnsuccessfulErr = "All hosts have been contacted unsuccessfully"
+)
 
 type Config struct {
 	AppId         string                `json:"app_id"`
@@ -23,11 +35,13 @@ type Config struct {
 	IndexName     string                `json:"index"`
 	Domain        string                `json:"domain"`
 	SearchAttrs   global.Strings        `json:"search_attrs"`
+	UrlPatterns   UrlPatterns           `json:"url_patterns"`
 	ElementsIndex global.ElemsTypeIndex `json:"elements"`
 	LookupIndex   global.LookupIndex    `json:"ignore"`
 	CacheDir      global.Dir            `json:"cache_dir"`
 	HomeDir       global.Dir            `json:"-"`
 	ConfigDir     global.Dir            `json:"-"`
+	OnErrPause    time.Duration         `json:"-"`
 }
 
 func LoadConfig() *Config {
@@ -52,6 +66,7 @@ func LoadConfig() *Config {
 		cfg.LookupIndex[typ] = lookup
 	}
 	cfg.ElementsIndex = nil
+	cfg.OnErrPause = InitialPause
 	return &cfg
 }
 
@@ -63,19 +78,19 @@ func (me *Config) GetFilepath() global.Filepath {
 	)
 }
 
-func (me *Config) HasElementName(ele *global.HTMLElement, typ global.ElemsType) (ok bool) {
+func (me *Config) HasElementName(ele *global.HtmlElement, typ global.ElemsType) (ok bool) {
 	return me.HasElement(global.NameValue, ele, typ)
 }
 
-func (me *Config) HasElementRel(ele *global.HTMLElement, typ global.ElemsType) (ok bool) {
+func (me *Config) HasElementRel(ele *global.HtmlElement, typ global.ElemsType) (ok bool) {
 	return me.HasElement(global.RelValue, ele, typ)
 }
 
-func (me *Config) HasElementMeta(ele *global.HTMLElement) (ok bool) {
+func (me *Config) HasElementMeta(ele *global.HtmlElement) (ok bool) {
 	return me.HasElement(global.MetaValue, ele, global.MetaElemsType)
 }
 
-func (me *Config) HasElement(v global.ValueType, ele *global.HTMLElement, typ global.ElemsType) (ok bool) {
+func (me *Config) HasElement(v global.ValueType, ele *global.HtmlElement, typ global.ElemsType) (ok bool) {
 	for range only.Once {
 		var m global.LookupMap
 		m, ok = me.LookupIndex[typ]
@@ -103,10 +118,6 @@ func (me *Config) getConfigDir() global.Filepath {
 	hd := fmt.Sprintf("%s%c", me.HomeDir, os.PathSeparator)
 	cd := regexp.MustCompile(`^~/`).ReplaceAllString(me.ConfigDir, hd)
 	return cd
-}
-
-func closeFile(f *os.File) {
-	_ = f.Close()
 }
 
 func (me *Config) ensureConfigExists() (b []byte) {
@@ -164,6 +175,44 @@ func (me *Config) ensureConfigExists() (b []byte) {
 		os.Exit(1)
 	}
 	return b
+}
+
+func (me *Config) OnFailedVisit(err error, urlpath global.UrlPath, descr string, nosleep ...bool) {
+	msg := err.Error()
+	nointernet := true
+	for range only.Once {
+		if strings.HasSuffix(msg, TimeoutErr) {
+			break
+		}
+		if strings.HasSuffix(msg, UnsuccessfulErr) {
+			break
+		}
+		nointernet = false
+	}
+	for range only.Once {
+		if nointernet {
+			if len(nosleep) == 0 {
+				me.OnErrPause = util.SecondsDuration(me.OnErrPause.Seconds() * PauseIncrease)
+				fmt.Printf("\nInternet connection unavailable; pausing %d seconds...",
+					int(me.OnErrPause.Seconds()),
+				)
+				time.Sleep(me.OnErrPause)
+				break
+			}
+			fmt.Printf("\nInternet connection unavailable; terminating.")
+			break
+		}
+		fmt.Print("\n")
+		logrus.Errorf("On %s to %s: %s",
+			descr,
+			urlpath,
+			err.Error(),
+		)
+	}
+}
+
+func closeFile(f *os.File) {
+	_ = f.Close()
 }
 
 func getUserCacheDir() (cd global.Dir) {

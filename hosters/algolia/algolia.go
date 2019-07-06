@@ -5,9 +5,11 @@ import (
 	"github.com/sirupsen/logrus"
 	"website-indexer/config"
 	"website-indexer/global"
+	"website-indexer/hosters"
+	"website-indexer/pages"
 )
 
-var _ global.IndexHoster = (*Algolia)(nil)
+var _ hosters.IndexHoster = (*Algolia)(nil)
 
 type Algolia struct {
 	Index  global.Index
@@ -33,14 +35,27 @@ func (me *Algolia) Initialize() error {
 	}
 	return err
 }
-func (me *Algolia) IndexObject(o global.Object) {
-	id, ok := o["id"]
-	if ok && id != nil {
-		o["objectID"] = id
-	}
-	delete(o, "id")
-	_, err := me.Index.AddObject(o)
+
+func (me *Algolia) IndexPage(p *pages.Page) bool {
+	noop()
+	o := hosters.NewObject(global.Object{
+		"objectID": p.Id.String(),
+		"title":    p.Title,
+		"urlpath":  p.UrlPath,
+		"body":     p.Body.String(),
+	})
+
+	o.AppendProperties(p.HeaderMap.ExtractStringMap())
+
+	o.AppendProperties(p.ElementsMap.ExtractStringMap())
+
+	ps := me.Config.UrlPatterns.ExtractStringMap(p.UrlPath)
+	o.AppendProperties(ps)
+	_, err := me.Index.AddObject(o.Object)
 	if err != nil {
-		logrus.Errorf("On adding object to index %s: %s", id, err)
+		me.Config.OnFailedVisit(err, p.UrlPath, "adding page to index")
 	}
+	return err == nil
 }
+
+func noop(i ...interface{}) interface{} { return i }
