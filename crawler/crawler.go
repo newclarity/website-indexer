@@ -5,6 +5,7 @@ import (
 	"github.com/gearboxworks/go-status/only"
 	"github.com/gocolly/colly"
 	"github.com/sirupsen/logrus"
+	"strings"
 	"time"
 	"website-indexer/config"
 	"website-indexer/global"
@@ -57,56 +58,7 @@ func (me *Crawler) Crawl() {
 	noop(host)
 
 	me.Collector.OnHTML("*", func(e *global.HtmlElement) {
-		for range only.Once {
-
-			pb.MaybeMapPathUrl(e.Request.URL.Path)
-
-			if me.HasElementName(e, global.IgnoreElemsType) {
-				break
-			}
-
-			if !me.HasElementName(e, global.CollectElemsType) {
-				break
-			}
-
-			pb.GetByUrlPath(e.Request.URL.Path).AppendElement(e)
-
-		}
-	})
-
-	me.Collector.OnHTML("*", func(e *global.HtmlElement) {
-		for range only.Once {
-			if me.HasElementName(e, global.IgnoreElemsType) {
-				break
-			}
-			p := pb.GetByUrlPath(e.Request.URL.Path)
-			if p == nil {
-				logrus.Warnf("page '%s' not mapped initially", e.Request.URL.Path)
-				break
-				//p = pb.MaybeMapElement(e)
-			}
-
-			switch e.Name {
-			case "a":
-				me.onA(p, e)
-			case "iframe":
-				me.onIFrame(p, e)
-			case "title":
-				me.onTitle(p, e)
-			case "link":
-				me.onLink(p, e)
-			case "meta":
-				me.onMeta(p, e)
-			case "body":
-				me.onBody(p, e)
-			default:
-				logrus.Warnf("Unhandled HTML element <%s> in %s: %s",
-					e.Name,
-					e.Request.URL.Path,
-					util.StripWhitespace(e.Text),
-				)
-			}
-		}
+		me.onHtml(pb, e)
 	})
 
 	me.Collector.OnRequest(func(r *colly.Request) {
@@ -114,25 +66,7 @@ func (me *Crawler) Crawl() {
 	})
 
 	me.Collector.OnScraped(func(r *colly.Response) {
-		for range only.Once {
-			up := r.Request.URL.Path
-			p := pb.GetByUrlPath(up)
-			if p == nil {
-				logrus.Warnf("No attributes collected for %s", up)
-				break
-			}
-			if !host.IndexPage(p) {
-				// @TODO Move file from /tmp/website-indexer/queued
-				//                   to /tmp/website-indexer/error
-				break
-			}
-			// @TODO Move file from /tmp/website-indexer/queued
-			//                   to /tmp/website-indexer/indexed
-			//                Write /tmp/website-indexer/indexed/{ha}/{sh}/{hash}/json
-
-			// Reset pause
-			me.Config.OnErrPause = config.InitialPause
-		}
+		me.onScraped(pb, host, r)
 	})
 
 	// @TODO Read URLs from /tmp/website-indexer/queued.
@@ -143,9 +77,118 @@ func (me *Crawler) Crawl() {
 		me.Config.OnFailedVisit(err, u, "queuing visit", true)
 	}
 }
+
+func (me *Crawler) onHtml(pb *pages.Buffer, e *global.HtmlElement) {
+	for range only.Once {
+
+		p := pb.MaybeMapPathUrl(e.Request.URL.Path)
+
+		if me.HasElementName(e, global.IgnoreElemsType) {
+			break
+		}
+
+		if me.HasElementName(e, global.CollectElemsType) {
+			p.AppendElement(e)
+		}
+
+		switch e.Name {
+		case "a":
+			me.onA(p, e)
+		case "iframe":
+			me.onIFrame(p, e)
+		case "title":
+			me.onTitle(p, e)
+		case "link":
+			me.onLink(p, e)
+		case "meta":
+			me.onMeta(p, e)
+		case "body":
+			me.onBody(p, e)
+		default:
+			logrus.Warnf("Unhandled HTML element <%s> in %s: %s",
+				e.Name,
+				e.Request.URL.Path,
+				util.StripWhitespace(e.Text),
+			)
+		}
+	}
+}
+
+func (me *Crawler) onScraped(pb *pages.Buffer, host hosters.IndexHoster, r *colly.Response) {
+	for range only.Once {
+		up := r.Request.URL.Path
+		p := pb.GetByUrlPath(up)
+		if p == nil {
+			logrus.Warnf("No attributes collected for %s", up)
+			break
+		}
+		if !host.IndexPage(p) {
+			// @TODO Move file from /tmp/website-indexer/queued
+			//                   to /tmp/website-indexer/error
+			break
+		}
+		// @TODO Move file from /tmp/website-indexer/queued
+		//                   to /tmp/website-indexer/indexed
+		//                Write /tmp/website-indexer/indexed/{ha}/{sh}/{hash}/json
+
+		// Reset pause
+		me.Config.OnErrPause = config.InitialPause
+	}
+}
+
+func (me *Crawler) onLink(p *pages.Page, e *global.HtmlElement) {
+	for range only.Once {
+		if !me.HasElementRel(e, global.LinkElemsType) {
+			break
+		}
+		p.AddHeader(e.Attr("rel"), e.Attr("href"))
+	}
+}
+
+func (me *Crawler) onTitle(p *pages.Page, e *global.HtmlElement) {
+	texts := strings.Split(e.Text+"|", "|")
+	p.Title = strings.TrimSpace(texts[0])
+}
+
+func (me *Crawler) onA(p *pages.Page, e *global.HtmlElement) {
+	for range only.Once {
+		u := util.Cleanurl(e.Attr("href"))
+		if u == "" {
+			break
+		}
+		me.RequestVisit(u, e)
+	}
+}
+
+func (me *Crawler) onIFrame(p *pages.Page, e *global.HtmlElement) {
+	for range only.Once {
+		u := util.Cleanurl(e.Attr("src"))
+		if u == "" {
+			break
+		}
+		me.RequestVisit(u, e)
+	}
+}
+
+func (me *Crawler) onMeta(p *pages.Page, e *global.HtmlElement) {
+	for range only.Once {
+		if !me.HasElementMeta(e) {
+			break
+		}
+		p.AddHeader(
+			e.Attr(global.MetaName),
+			e.Attr(global.MetaContent),
+		)
+	}
+}
+
+func (me *Crawler) onBody(p *pages.Page, e *global.HtmlElement) {
+	p.Body = append(p.Body, pages.NewElement(e).GetHtml())
+}
+
 func (me *Crawler) RequestVisit(u string, e *global.HtmlElement) {
 	for range only.Once {
-		persist.QueueUrlPath(me.Config, u)
+		persist.QueuedUrlPath(me.Config, u)
 		err := e.Request.Visit(u)
 		if err != nil {
 			switch err.Error() {

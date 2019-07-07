@@ -27,6 +27,7 @@ type (
 	UrlPath  = string
 	Dir      = string
 	Path     = string
+	Filename = string
 	Filepath = string
 	Entry    = string
 

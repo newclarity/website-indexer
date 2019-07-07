@@ -16,13 +16,13 @@ func (me HtmlBody) String() string {
 type Map map[Hash]*Page
 type Pages []*Page
 type Page struct {
-	Id          *Hash
-	UrlPath     global.UrlPath
-	HeaderMap   HeaderMap
-	Title       string
-	Body        HtmlBody
-	ElementsMap ElementsMap
-	PropertyMap PropertyMap
+	Id          *Hash          `json:"id"`
+	UrlPath     global.UrlPath `json:"url_path"`
+	HeaderMap   HeaderMap      `json:"header_map"`
+	Title       string         `json:"title"`
+	Body        HtmlBody       `json:"body"`
+	ElementsMap ElementsMap    `json:"elements_map"`
+	PropertyMap PropertyMap    `json:"property_map"`
 }
 
 func NewPage(urlpath global.UrlPath) *Page {

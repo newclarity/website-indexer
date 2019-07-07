@@ -6,3 +6,9 @@ const (
 	ErroredDir       = "errored"
 	JsonFileTemplate = "/{hash:2}/{hash}.json"
 )
+
+const (
+	CannotExist Existence = iota
+	CanExist
+	MustExist
+)
