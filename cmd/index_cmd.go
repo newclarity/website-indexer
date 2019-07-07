@@ -1,13 +1,10 @@
 package cmd
 
 import (
-	"fmt"
 	"github.com/gearboxworks/go-status/only"
 	"github.com/spf13/cobra"
-	"path"
 	"website-indexer/config"
 	"website-indexer/crawler"
-	"website-indexer/util"
 )
 
 type CrawlArgs struct {
@@ -21,15 +18,6 @@ var CrawlCmd = &cobra.Command{
 	Use:   "crawl",
 	Short: "Crawl a website to generate an index",
 	PreRun: func(cmd *cobra.Command, args []string) {
-		for range only.Once {
-			if crawlargs.ConfigFile == "" {
-				crawlargs.ConfigFile = path.Clean(fmt.Sprintf("%s/../config/%s",
-					util.ExecDir(),
-					config.Filename,
-				))
-			}
-
-		}
 	},
 	RunE: func(cmd *cobra.Command, args []string) (err error) {
 		for range only.Once {

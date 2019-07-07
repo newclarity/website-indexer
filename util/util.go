@@ -50,10 +50,10 @@ func Cleanurl(u string) string {
 			u = ""
 			break
 		}
-		if u[len(u)-1] != '/' {
-			u += "/"
-			break
-		}
+		//if u[len(u)-1] != '/' {
+		//	u += "/"
+		//	break
+		//}
 		if u[len(u)-2:] == "//" {
 			u = u[:len(u)-2]
 			break

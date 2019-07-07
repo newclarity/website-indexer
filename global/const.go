@@ -1,5 +1,7 @@
 package global
 
+const AppName = "website-indexer"
+
 const (
 	MetaName    = "name"
 	MetaContent = "content"

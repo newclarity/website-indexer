@@ -2,6 +2,7 @@ package algolia
 
 import (
 	"github.com/algolia/algoliasearch-client-go/algoliasearch"
+	"github.com/gearboxworks/go-status/only"
 	"github.com/sirupsen/logrus"
 	"website-indexer/config"
 	"website-indexer/global"
@@ -37,23 +38,26 @@ func (me *Algolia) Initialize() error {
 }
 
 func (me *Algolia) IndexPage(p *pages.Page) bool {
-	noop()
-	o := hosters.NewObject(global.Object{
-		"objectID": p.Id.String(),
-		"title":    p.Title,
-		"urlpath":  p.UrlPath,
-		"body":     p.Body.String(),
-	})
+	var err error
+	for range only.Once {
+		o := hosters.NewObject(global.Object{
+			"objectID": p.Id.String(),
+			"title":    p.Title,
+			"urlpath":  p.UrlPath,
+			"body":     p.Body.String(),
+		})
 
-	o.AppendProperties(p.HeaderMap.ExtractStringMap())
+		o.AppendProperties(p.HeaderMap.ExtractStringMap())
 
-	o.AppendProperties(p.ElementsMap.ExtractStringMap())
+		o.AppendProperties(p.ElementsMap.ExtractStringMap())
 
-	ps := me.Config.UrlPatterns.ExtractStringMap(p.UrlPath)
-	o.AppendProperties(ps)
-	_, err := me.Index.AddObject(o.Object)
-	if err != nil {
-		me.Config.OnFailedVisit(err, p.UrlPath, "adding page to index")
+		ps := me.Config.UrlPatterns.ExtractStringMap(p.UrlPath)
+		o.AppendProperties(ps)
+		_, err = me.Index.AddObject(o.Object)
+		if err != nil {
+			me.Config.OnFailedVisit(err, p.UrlPath, "adding page to index")
+			break
+		}
 	}
 	return err == nil
 }

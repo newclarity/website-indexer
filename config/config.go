@@ -38,6 +38,7 @@ type Config struct {
 	UrlPatterns   UrlPatterns           `json:"url_patterns"`
 	ElementsIndex global.ElemsTypeIndex `json:"elements"`
 	LookupIndex   global.LookupIndex    `json:"ignore"`
+	DataDir       global.Dir            `json:"data_dir"`
 	CacheDir      global.Dir            `json:"cache_dir"`
 	HomeDir       global.Dir            `json:"-"`
 	ConfigDir     global.Dir            `json:"-"`
@@ -45,10 +46,11 @@ type Config struct {
 }
 
 func LoadConfig() *Config {
-	cfg := Config{}
-	cfg.HomeDir = getUserHomeDir()
-	cfg.CacheDir = getUserCacheDir()
-	cfg.ConfigDir = cfg.getConfigDir()
+	cfg := Config{
+		ConfigDir: Dir,
+	}
+	cfg.HomeDir = getHomeDir()
+	cfg.ConfigDir = cfg.expandConfigDir()
 	b := cfg.ensureConfigExists()
 	err := json.Unmarshal(b, &cfg)
 	if err != nil {
@@ -56,6 +58,18 @@ func LoadConfig() *Config {
 			cfg.GetFilepath(),
 			err,
 		)
+	}
+	if cfg.DataDir == "" {
+		cfg.DataDir = fmt.Sprintf("%s%c%s",
+			cfg.HomeDir,
+			os.PathSeparator,
+			global.AppName,
+		)
+	} else {
+		cfg.DataDir = cfg.maybeExpandDataDir()
+	}
+	if cfg.CacheDir == "" {
+		cfg.CacheDir = getCacheDir()
 	}
 	cfg.LookupIndex = make(global.LookupIndex, len(cfg.ElementsIndex))
 	for typ, es := range cfg.ElementsIndex {
@@ -78,6 +92,11 @@ func (me *Config) GetFilepath() global.Filepath {
 	)
 }
 
+var homeDirRegexp *regexp.Regexp
+
+func init() {
+	homeDirRegexp = regexp.MustCompile(`^~/`)
+}
 func (me *Config) HasElementName(ele *global.HtmlElement, typ global.ElemsType) (ok bool) {
 	return me.HasElement(global.NameValue, ele, typ)
 }
@@ -111,12 +130,15 @@ func (me *Config) HasElement(v global.ValueType, ele *global.HtmlElement, typ gl
 	return ok
 }
 
-func (me *Config) getConfigDir() global.Filepath {
-	if me.ConfigDir == "" {
-		me.ConfigDir = Dir
-	}
+func (me *Config) maybeExpandDataDir() global.Filepath {
 	hd := fmt.Sprintf("%s%c", me.HomeDir, os.PathSeparator)
-	cd := regexp.MustCompile(`^~/`).ReplaceAllString(me.ConfigDir, hd)
+	dd := homeDirRegexp.ReplaceAllString(me.DataDir, hd)
+	return dd
+}
+
+func (me *Config) expandConfigDir() global.Filepath {
+	hd := fmt.Sprintf("%s%c", me.HomeDir, os.PathSeparator)
+	cd := homeDirRegexp.ReplaceAllString(me.ConfigDir, hd)
 	return cd
 }
 
@@ -215,7 +237,7 @@ func closeFile(f *os.File) {
 	_ = f.Close()
 }
 
-func getUserCacheDir() (cd global.Dir) {
+func getCacheDir() (cd global.Dir) {
 	cd, err := os.UserCacheDir()
 	if err != nil {
 		if runtime.GOOS == "windows" {
@@ -224,10 +246,14 @@ func getUserCacheDir() (cd global.Dir) {
 			cd = "/tmp"
 		}
 	}
-	return cd
+	return fmt.Sprintf("%s%c%s",
+		cd,
+		os.PathSeparator,
+		global.AppName,
+	)
 }
 
-func getUserHomeDir() (hd global.Dir) {
+func getHomeDir() (hd global.Dir) {
 	hd, err := os.UserHomeDir()
 	if err != nil {
 		fmt.Printf("User home directory not found. Set environment variable HOME and retry.")

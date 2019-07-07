@@ -3,6 +3,7 @@
    "api_key": "abcdef123456789abcdef123456789ab",
    "index": "text_Example",
    "domain": "example.com",
+   "data_dir": "~/Desktop/website-indexer",
    "search_attrs": [
       "article",
       "body",

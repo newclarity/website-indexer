@@ -39,7 +39,7 @@ func (me *Page) AddHeader(name global.HtmlName, value global.Content) {
 	me.HeaderMap[name] = strings.TrimSpace(value)
 }
 
-func (me *Page) AppendHtml(ele *global.HtmlElement) *Element {
+func (me *Page) AppendElement(ele *global.HtmlElement) {
 	e := NewElement(ele)
 	for range only.Once {
 		me.Body = append(me.Body, e.GetHtml())
@@ -50,7 +50,6 @@ func (me *Page) AppendHtml(ele *global.HtmlElement) *Element {
 		}
 		me.ElementsMap[e.Name] = append(me.ElementsMap[e.Name], e)
 	}
-	return e
 }
 
 func (me *Page) GetHash() Hash {
