@@ -22,6 +22,9 @@ type LookupIndex = map[ElemsType]LookupMap
 
 type HtmlElement = colly.HTMLElement
 
+type Urls = []Url
+type UrlPaths = []UrlPath
+type Filepaths = []Filepath
 type (
 	Url      = string
 	UrlPath  = string

@@ -11,18 +11,18 @@ type UrlPattern string
 
 var templVarRegex = regexp.MustCompile(`^\s*{(.+)}\s*$`)
 
-func (me UrlPatterns) ExtractStringMap(urlpath global.UrlPath) global.StringMap {
+func (me UrlPatterns) ExtractStringMap(url global.Url) global.StringMap {
 	sm := make(global.StringMap, 0)
-	urlpath = strings.Trim(urlpath, "/")
-	upps := strings.Split(urlpath, "/")
+	url = strings.Trim(url, "/")
+	urls := strings.Split(url, "/")
 	for _, urlpat := range me {
 		patparts := strings.Split(strings.Trim(string(urlpat), "/"), "/")
-		if len(upps) != len(patparts) {
+		if len(urls) != len(patparts) {
 			continue
 		}
 		for i, patpart := range patparts {
 			tv := templVarRegex.ReplaceAllString(patpart, "$1")
-			sm[tv] = upps[i]
+			sm[tv] = urls[i]
 		}
 	}
 	return sm

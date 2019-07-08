@@ -9,6 +9,7 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"strings"
 	"website-indexer/config"
 	"website-indexer/global"
 	"website-indexer/pages"
@@ -20,15 +21,80 @@ var template *uritemplates.UriTemplate
 func init() {
 	template, _ = uritemplates.Parse(JsonFileTemplate)
 }
-func QueuedUrlPath(cfg *config.Config, urlpath global.UrlPath) (found bool) {
+func HasQueuedUrls(cfg *config.Config) (found bool) {
+	for range only.Once {
+		qsd := GetQueuedSubdir(cfg)
+		f, err := os.Open(qsd)
+		if err != nil {
+			logrus.Fatalf("unable to open queued directory '%s': '%s'",
+				qsd,
+				err.Error(),
+			)
+			break
+		}
+		// Assumes no more than a few non-directories
+		files, err := f.Readdir(10)
+		if err != nil {
+			logrus.Fatalf("unable to read 10 directory entries in queued directory '%s': '%s'",
+				qsd,
+				err.Error(),
+			)
+			break
+		}
+		for _, f := range files {
+			if !f.IsDir() {
+				continue
+			}
+			if len(f.Name()) != 2 {
+				break
+			}
+			found = true
+			break
+		}
+	}
+	return found
+}
+
+func GetQueuedUrls(cfg *config.Config) (global.Urls, error) {
+	qsd := GetQueuedSubdir(cfg)
+	queued := make(global.Urls, 0)
+	err := filepath.Walk(qsd, func(fp string, fi os.FileInfo, err error) error {
+		for range only.Once {
+			if err != nil {
+				break
+			}
+			if fi.Name() == ".DS_Store" {
+				break
+			}
+			if fi.IsDir() {
+				break
+			}
+			c, err := ioutil.ReadFile(fp)
+			if err != nil {
+				err = fmt.Errorf("cannot read file '%s': %s", fp, err.Error())
+			}
+			queued = append(
+				queued,
+				strings.TrimSpace(global.Url(c)),
+			)
+		}
+		return err
+	})
+	if err != nil {
+		err = fmt.Errorf("cannot walk directory '%s': %s", qsd, err.Error())
+	}
+	return queued, err
+}
+
+func QueuedUrl(cfg *config.Config, url *pages.Url) (found bool) {
 	for range only.Once {
 
-		fp, err := GetSubdirFilepath(cfg, QueuedDir, urlpath)
+		fp, err := GetSubdirFilepath(cfg, QueuedDir, url)
 		if err != nil {
 			break
 		}
-		b := []byte(urlpath)
-		if WriteFile(fp, b, urlpath, CannotExist) != nil {
+		b := []byte(url.GetUrl())
+		if WriteFile(fp, b, CannotExist) != nil {
 			found = true
 			break
 		}
@@ -47,30 +113,32 @@ func Persist(cfg *config.Config, subdir global.Dir, page *pages.Page) (err error
 		var b []byte
 		b, err = json.Marshal(page)
 		if err != nil {
-			err = fmt.Errorf("unable to marshal page '%s': %s", page.UrlPath, err.Error())
+			err = fmt.Errorf("unable to marshal page '%s': %s", page.Url, err.Error())
 			break
 		}
-		fp, err := GetSubdirFilepath(cfg, subdir, page.UrlPath)
+		fp, err := GetSubdirFilepath(cfg, subdir, page.Url)
 		if err != nil {
 			break
 		}
-		err = WriteFile(fp, b, page.UrlPath, CanExist)
+		err = WriteFile(fp, b, CanExist)
 		if err != nil {
+			err = fmt.Errorf("%s for URL '%s'", err.Error(), page.Url)
 			break
 		}
 	}
 	return err
 }
-func WriteFile(fp global.Filepath, content []byte, urlpath global.UrlPath, exists Existence) (err error) {
+
+func WriteFile(fp global.Filepath, content []byte, exists Existence) (err error) {
 	for range only.Once {
 		switch exists {
 		case CannotExist:
 			if util.FileExists(fp) {
-				err = fmt.Errorf("file '%s' for URL path '%s' already exists", fp, urlpath)
+				err = fmt.Errorf("file '%s'already exists", fp)
 			}
 		case MustExist:
 			if !util.FileExists(fp) {
-				err = fmt.Errorf("file '%s' for URL path '%s' does not exists", fp, urlpath)
+				err = fmt.Errorf("file '%s' does not exists", fp)
 			}
 		case CanExist:
 			// Do nothing
@@ -85,19 +153,15 @@ func WriteFile(fp global.Filepath, content []byte, urlpath global.UrlPath, exist
 		}
 		err = ioutil.WriteFile(fp, content, os.ModePerm)
 		if err != nil {
-			err = fmt.Errorf("unable to write file '%s' for URL path %s: %s",
-				fp,
-				urlpath,
-				err.Error(),
-			)
+			err = fmt.Errorf("unable to write file '%s': %s", fp, err.Error())
 			break
 		}
 	}
 	return err
 }
 
-func GetUrlPathFilename(urlpath global.UrlPath) (fn global.Filename, err error) {
-	h := pages.NewHash(urlpath)
+func GetUrlFilename(url *pages.Url) (fn global.Filename, err error) {
+	h := url.Hash()
 	fn, err = template.Expand(map[string]interface{}{
 		"hash": h,
 	})
@@ -110,17 +174,35 @@ func GetUrlPathFilename(urlpath global.UrlPath) (fn global.Filename, err error) 
 	return fn, err
 }
 
-func GetSubdirFilepath(cfg *config.Config, subdir global.Dir, urlpath global.UrlPath) (fp global.Filepath, err error) {
+func GetQueuedSubdir(cfg *config.Config) (d global.Dir) {
+	return GetSubdir(cfg, QueuedDir)
+}
+
+func GetIndexedSubdir(cfg *config.Config) (d global.Dir) {
+	return GetSubdir(cfg, IndexedDir)
+}
+
+func GetErroredSubdir(cfg *config.Config) (d global.Dir) {
+	return GetSubdir(cfg, ErroredDir)
+}
+
+func GetSubdir(cfg *config.Config, subdir global.Dir) (d global.Dir) {
+	return fmt.Sprintf("%s%c%s",
+		cfg.DataDir,
+		os.PathSeparator,
+		subdir,
+	)
+}
+
+func GetSubdirFilepath(cfg *config.Config, subdir global.Dir, url *pages.Url) (fp global.Filepath, err error) {
 	for range only.Once {
 		var fn global.Filename
-		fn, err = GetUrlPathFilename(urlpath)
+		fn, err = GetUrlFilename(url)
 		if err != nil {
 			break
 		}
-		fp = fmt.Sprintf("%s%c%s%c%s",
-			cfg.DataDir,
-			os.PathSeparator,
-			subdir,
+		fp = fmt.Sprintf("%s%c%s",
+			GetSubdir(cfg, subdir),
 			os.PathSeparator,
 			fn,
 		)

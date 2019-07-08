@@ -21,15 +21,15 @@ var hashes *lru.Cache
 func init() {
 	hashes, _ = lru.New(cacheSize)
 }
-func NewHash(urlpath global.UrlPath) (hash *Hash) {
-	urlpath = strings.Trim(urlpath, "/")
-	ih, ok := hashes.Get(urlpath)
+func NewHash(url global.Url) (hash *Hash) {
+	url = strings.Trim(url, "/")
+	ih, ok := hashes.Get(url)
 	if ok {
 		hash = ih.(*Hash)
 	} else {
-		h := Hash(sha256.Sum256([]byte(urlpath)))
+		h := Hash(sha256.Sum256([]byte(url)))
 		hash = &h
-		hashes.Add(urlpath, hash)
+		hashes.Add(url, hash)
 	}
 	return hash
 }

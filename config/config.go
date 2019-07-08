@@ -199,7 +199,7 @@ func (me *Config) ensureConfigExists() (b []byte) {
 	return b
 }
 
-func (me *Config) OnFailedVisit(err error, urlpath global.UrlPath, descr string, nosleep ...bool) {
+func (me *Config) OnFailedVisit(err error, url global.Url, descr string, nosleep ...bool) {
 	msg := err.Error()
 	nointernet := true
 	for range only.Once {
@@ -227,7 +227,7 @@ func (me *Config) OnFailedVisit(err error, urlpath global.UrlPath, descr string,
 		fmt.Print("\n")
 		logrus.Errorf("On %s to %s: %s",
 			descr,
-			urlpath,
+			url,
 			err.Error(),
 		)
 	}

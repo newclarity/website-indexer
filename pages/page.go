@@ -16,19 +16,24 @@ func (me HtmlBody) String() string {
 type Map map[Hash]*Page
 type Pages []*Page
 type Page struct {
-	Id          *Hash          `json:"id"`
-	UrlPath     global.UrlPath `json:"url_path"`
-	HeaderMap   HeaderMap      `json:"header_map"`
-	Title       string         `json:"title"`
-	Body        HtmlBody       `json:"body"`
-	ElementsMap ElementsMap    `json:"elements_map"`
-	PropertyMap PropertyMap    `json:"property_map"`
+	Id          *Hash       `json:"id"`
+	HeaderMap   HeaderMap   `json:"header_map"`
+	Title       string      `json:"title"`
+	Body        HtmlBody    `json:"body"`
+	ElementsMap ElementsMap `json:"elements_map"`
+	PropertyMap PropertyMap `json:"property_map"`
+
+	*Url `json:"url"`
 }
 
-func NewPage(urlpath global.UrlPath) *Page {
+func NewPage(url global.Url, referer ...global.Url) *Page {
+	if len(referer) == 0 {
+		referer = []string{""}
+	}
+	u := NewUrl(url, referer[0])
 	return &Page{
-		Id:          NewHash(urlpath),
-		UrlPath:     urlpath,
+		Id:          u.Hash(),
+		Url:         u,
 		Body:        make(HtmlBody, 0),
 		ElementsMap: make(ElementsMap, 0),
 		HeaderMap:   make(HeaderMap, 0),

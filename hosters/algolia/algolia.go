@@ -43,7 +43,7 @@ func (me *Algolia) IndexPage(p *pages.Page) bool {
 		o := hosters.NewObject(global.Object{
 			"objectID": p.Id.String(),
 			"title":    p.Title,
-			"urlpath":  p.UrlPath,
+			"url":      p.Url.String(),
 			"body":     p.Body.String(),
 		})
 
@@ -51,11 +51,12 @@ func (me *Algolia) IndexPage(p *pages.Page) bool {
 
 		o.AppendProperties(p.ElementsMap.ExtractStringMap())
 
-		ps := me.Config.UrlPatterns.ExtractStringMap(p.UrlPath)
+		url := p.Url.GetUrl()
+		ps := me.Config.UrlPatterns.ExtractStringMap(url)
 		o.AppendProperties(ps)
 		_, err = me.Index.AddObject(o.Object)
 		if err != nil {
-			me.Config.OnFailedVisit(err, p.UrlPath, "adding page to index")
+			me.Config.OnFailedVisit(err, url, "adding page to index")
 			break
 		}
 	}

@@ -6,7 +6,8 @@ import (
 )
 
 type Buffer struct {
-	PageMap Map
+	CurrentUrl global.Url
+	PageMap    Map
 }
 
 func NewBuffer() *Buffer {
@@ -15,38 +16,29 @@ func NewBuffer() *Buffer {
 	}
 }
 
-func (me *Buffer) MaybeMapElement(e *global.HtmlElement) *Page {
-	p := NewPage(e.Request.URL.Path)
-	me.MaybeMapPage(p).AppendElement(e)
-	return p
-}
-
 // Add a Page to the Page Map if not already mapped
-func (me *Buffer) MaybeMapPathUrl(urlpath global.UrlPath) (p *Page) {
+func (me *Buffer) MaybeMapUrl(url *Url) (p *Page) {
 	for range only.Once {
-		if me.HasUrlPath(urlpath) {
-			p = me.GetByUrlPath(urlpath)
+		if me.HasUrl(url) {
+			p = me.GetByUrl(url)
 			break
 		}
-		p = NewPage(urlpath)
-		me.PageMap[*NewHash(urlpath)] = p
+		u := url.GetUrl()
+		ru := me.CurrentUrl
+		if u == ru {
+			p = NewPage(url.GetUrl())
+		} else {
+			referer := me.CurrentUrl
+			noop(referer)
+			p = NewPage(url.GetUrl(), me.CurrentUrl)
+		}
+		me.PageMap[p.GetHash()] = p
 	}
 	return p
 }
 
-// Add a Page to the Page Map if not already mapped
-func (me *Buffer) MaybeMapPage(page *Page) *Page {
-	for range only.Once {
-		if me.HasPage(page) {
-			break
-		}
-		me.PageMap[page.GetHash()] = page
-	}
-	return page
-}
-
-func (me *Buffer) HasUrlPath(urlpath global.UrlPath) bool {
-	return me.HasPageHash(*NewHash(urlpath))
+func (me *Buffer) HasUrl(url *Url) bool {
+	return me.HasPageHash(*url.Hash())
 }
 
 func (me *Buffer) HasPage(page *Page) bool {
@@ -58,13 +50,9 @@ func (me *Buffer) HasPageHash(hash Hash) bool {
 	return has
 }
 
-func (me *Buffer) GetByElement(ele *global.HtmlElement) (p *Page) {
-	return me.GetByUrlPath(ele.Request.URL.Path)
-}
-
-func (me *Buffer) GetByUrlPath(urlpath global.UrlPath) (p *Page) {
+func (me *Buffer) GetByUrl(url *Url) (p *Page) {
 	for range only.Once {
-		hash := *NewHash(urlpath)
+		hash := *url.Hash()
 		if me.HasPageHash(hash) {
 			p = me.PageMap[hash]
 			break

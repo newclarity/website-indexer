@@ -33,33 +33,4 @@ func StripWhitespace(str string) string {
 	return strings.Map(f, str)
 }
 
-func Cleanurl(u string) string {
-	for range only.Once {
-		if len(u) == 0 {
-			u = "/"
-			break
-		}
-		if strings.Contains(u, "?") {
-			break
-		}
-		if u[0] == '#' {
-			u = ""
-			break
-		}
-		if u[:4] == "tel:" {
-			u = ""
-			break
-		}
-		//if u[len(u)-1] != '/' {
-		//	u += "/"
-		//	break
-		//}
-		if u[len(u)-2:] == "//" {
-			u = u[:len(u)-2]
-			break
-		}
-	}
-	return u
-}
-
 func noop(i ...interface{}) interface{} { return i }
