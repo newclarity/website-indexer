@@ -1,38 +1,28 @@
 package pages
 
 import (
-	"fmt"
 	"github.com/gearboxworks/go-status/only"
+	"net/url"
 	"strings"
 	"website-indexer/global"
 )
 
-type HtmlBody global.Strings
-
-func (me HtmlBody) String() string {
-	return strings.Join(me, "\n")
-}
-
-type Map map[Hash]*Page
+type PageMap map[Hash]*Page
 type Pages []*Page
 type Page struct {
-	Id          *Hash       `json:"id"`
+	Id          Hash        `json:"id"`
+	Url         global.Url  `json:"url"`
 	HeaderMap   HeaderMap   `json:"header_map"`
 	Title       string      `json:"title"`
 	Body        HtmlBody    `json:"body"`
 	ElementsMap ElementsMap `json:"elements_map"`
 	PropertyMap PropertyMap `json:"property_map"`
-
-	*Url `json:"url"`
 }
 
-func NewPage(url global.Url, referer ...global.Url) *Page {
-	if len(referer) == 0 {
-		referer = []string{""}
-	}
-	u := NewUrl(url, referer[0])
+func NewPage(url *url.URL) *Page {
+	u := url.String()
 	return &Page{
-		Id:          u.Hash(),
+		Id:          NewHash(u),
 		Url:         u,
 		Body:        make(HtmlBody, 0),
 		ElementsMap: make(ElementsMap, 0),
@@ -58,9 +48,9 @@ func (me *Page) AppendElement(ele *global.HtmlElement) {
 }
 
 func (me *Page) GetHash() Hash {
-	return *me.Id
+	return me.Id
 }
 
 func (me *Page) GetHashString() string {
-	return string(fmt.Sprintf("%x", *me.Id))
+	return me.Id.String()
 }

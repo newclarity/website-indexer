@@ -5,6 +5,7 @@ const (
 	IndexedDir       = "indexed"
 	ErroredDir       = "errored"
 	JsonFileTemplate = "/{hash:2}/{hash}.json"
+	SqliteDbFilename = "crawl.db"
 )
 
 const (

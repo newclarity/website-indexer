@@ -4,7 +4,11 @@ import (
 	"fmt"
 	"github.com/gearboxworks/go-status/only"
 	"github.com/gocolly/colly"
+	"github.com/gocolly/colly/debug"
 	"github.com/sirupsen/logrus"
+	"github.com/velebak/colly-sqlite3-storage/colly/sqlite3"
+	"net/http"
+	"net/url"
 	"strings"
 	"time"
 	"website-indexer/config"
@@ -20,24 +24,59 @@ const (
 	NoPatternDefined = "No pattern defined in LimitRule"
 )
 
+var _ debug.Debugger = (*Debugger)(nil)
+
+type Debugger struct{}
+
+func (me *Debugger) Init() error {
+	return nil
+}
+
+func (me *Debugger) Event(e *debug.Event) {
+	return
+}
+
 type Crawler struct {
 	*config.Config
 	Collector *colly.Collector
 	Host      hosters.IndexHoster
+	Storage   *sqlite3.Storage
+	Page      *pages.Page
 }
 
 func NewCrawler(cfg *config.Config) (c *Crawler) {
 	for range only.Once {
-		c = &Crawler{
-			Config: cfg,
-			Collector: colly.NewCollector(
-				colly.AllowedDomains("www."+cfg.Domain, cfg.Domain),
-				//colly.Async(true),
-			),
+		cc := colly.NewCollector(
+			colly.CacheDir(cfg.CacheDir),
+			colly.ParseHTTPErrorResponse(),
+			colly.AllowedDomains("www."+cfg.Domain, cfg.Domain),
+			colly.Debugger(&Debugger{}),
+		)
+
+		cc.RedirectHandler = func(req *http.Request, via []*http.Request) error {
+			return nil
 		}
-		err := c.Collector.Limit(&colly.LimitRule{
+
+		c = &Crawler{
+			Config:    cfg,
+			Collector: cc,
+		}
+
+		fp := persist.GetDbFilepath(cfg)
+		c.Storage = &sqlite3.Storage{
+			Filename: fp,
+		}
+
+		err := cc.SetStorage(c.Storage)
+		if err != nil {
+			logrus.Fatalf("Unable to open crawl DB: %s", fp, err)
+			break
+		}
+
+		err = c.Collector.Limit(&colly.LimitRule{
 			Delay: 250 * time.Millisecond,
 		})
+
 		if err == nil {
 			break
 		}
@@ -49,67 +88,107 @@ func NewCrawler(cfg *config.Config) (c *Crawler) {
 	return c
 }
 
-func (me *Crawler) Crawl() {
-	for range only.Once {
-		cfg := me.Config
+func (me *Crawler) HasQueuedUrls() bool {
+	n, _ := me.Storage.QueueSize()
+	return n != 0
+}
 
-		pb := pages.NewBuffer()
+func (me *Crawler) Crawl() *Crawler {
 
-		host := algolia.NewAlgolia(cfg)
-		noop(host)
+	me.Host = algolia.NewAlgolia(me.Config)
+	me.Collector.OnHTML("*", me.onHtml)
+	me.Collector.OnRequest(me.onRequest)
+	me.Collector.OnScraped(me.onScraped)
 
-		me.Collector.OnHTML("*", func(e *global.HtmlElement) {
-			me.onHtml(pb, e)
-		})
+	if !me.HasQueuedUrls() {
+		me.QueueUrl(me.RootUrl())
+	}
+	me.VisitQueued()
 
-		me.Collector.OnRequest(func(r *colly.Request) {
-			me.onRequest(pb, r)
-		})
+	return me
+}
 
-		me.Collector.OnScraped(func(r *colly.Response) {
-			me.onScraped(pb, host, r)
-		})
+func (me *Crawler) RootUrl() global.Url {
+	return fmt.Sprintf("https://www.%s/", me.Config.Domain)
+}
 
-		if !persist.HasQueuedUrls(cfg) {
-			me.RequestVisits(global.Urls{
-				fmt.Sprintf("https://www.%s/", cfg.Domain),
-			})
-		} else {
-			queued, err := persist.GetQueuedUrls(cfg)
-			if err != nil {
-				logrus.Fatal(err.Error())
-			}
-			me.RequestVisits(queued)
-
-		}
+func (me *Crawler) Close() {
+	err := me.Storage.Close()
+	if err != nil {
+		logrus.Errorf("unable to close Sqlite storage")
 	}
 }
 
-func (me *Crawler) RequestVisits(urls global.Urls) {
-	for _, u := range urls {
-		err := me.Collector.Visit(u)
+// AddURL adds a new URL to the queue
+func (me *Crawler) AddUrl(URL string) (err error) {
+	for range only.Once {
+		var u *url.URL
+		u, err = url.Parse(URL)
+		if err != nil {
+			break
+		}
+		r := &colly.Request{
+			URL:    u,
+			Method: "GET",
+		}
+		var b []byte
+		b, err = r.Marshal()
+		if err != nil {
+			break
+		}
+		err = me.Storage.AddRequest(b)
+		if err != nil {
+			break
+		}
+	}
+	return err
+}
+
+func (me *Crawler) QueueUrl(url global.Url) {
+	err := me.AddUrl(url)
+	if err != nil {
+		logrus.Errorf("URL '%s' not added to queue", url)
+	}
+}
+
+func (me *Crawler) VisitQueued() {
+	var err error
+	for {
+		var b []byte
+		b, err = me.Storage.GetRequest()
+		if err != nil {
+			break
+		}
+		c := me.Collector
+		var r *colly.Request
+		r, err = c.UnmarshalRequest(b)
+		if err != nil || r == nil {
+			continue
+		}
+		err = c.Visit(r.URL.String())
 		if err == nil {
 			continue
 		}
-		me.Config.OnFailedVisit(err, u, "queuing visit", true)
+		switch err.Error() {
+		case "Forbidden domain":
+			err = nil
+			continue
+		}
 	}
+	if err != nil {
+		me.Config.OnFailedVisit(err, "", "visiting queued", true)
+	}
+
 }
 
-func (me *Crawler) onRequest(pb *pages.Buffer, r *colly.Request) {
-	for range only.Once {
-		u := pages.NewUrl(r.URL.String())
-		pb.CurrentUrl = u.GetUrl()
-		p := pb.MaybeMapUrl(u)
-		fmt.Print("\nVisiting ", p.Url)
-	}
+func (me *Crawler) onRequest(r *colly.Request) {
+	fmt.Print("\nVisiting ", r.URL)
+	me.Page = pages.NewPage(r.URL)
 }
 
-func (me *Crawler) onHtml(pb *pages.Buffer, e *global.HtmlElement) {
+func (me *Crawler) onHtml(e *global.HtmlElement) {
 	for range only.Once {
-
-		url := pages.NewUrl(e.Request.URL.String(), pb.CurrentUrl)
-		p := pb.GetByUrl(url)
-		if p == nil {
+		if me.Page == nil {
 			logrus.Errorf("page not registered for URL '%s'", e.Request.URL.String())
 			break
 		}
@@ -119,22 +198,22 @@ func (me *Crawler) onHtml(pb *pages.Buffer, e *global.HtmlElement) {
 		}
 
 		if me.HasElementName(e, global.CollectElemsType) {
-			p.AppendElement(e)
+			me.Page.AppendElement(e)
 		}
 
 		switch e.Name {
 		case "a":
-			me.onA(pb, p, e)
+			me.onA(e)
 		case "iframe":
-			me.onIFrame(pb, p, e)
+			me.onIFrame(e)
 		case "title":
-			me.onTitle(pb, p, e)
+			me.onTitle(e)
 		case "link":
-			me.onLink(pb, p, e)
+			me.onLink(e)
 		case "meta":
-			me.onMeta(pb, p, e)
+			me.onMeta(e)
 		case "body":
-			me.onBody(pb, p, e)
+			me.onBody(e)
 		default:
 			logrus.Warnf("Unhandled HTML element <%s> in %s: %s",
 				e.Name,
@@ -145,91 +224,82 @@ func (me *Crawler) onHtml(pb *pages.Buffer, e *global.HtmlElement) {
 	}
 }
 
-func (me *Crawler) onScraped(pb *pages.Buffer, host hosters.IndexHoster, r *colly.Response) {
+func (me *Crawler) onScraped(r *colly.Response) {
 	for range only.Once {
-		url := pages.NewUrl(r.Request.URL.String(), pb.CurrentUrl)
-		p := pb.GetByUrl(url)
-		if p == nil {
-			logrus.Warnf("No attributes collected for %s", url)
+		p := me.Page
+		p.Url = r.Request.URL.String()
+		p.Id = pages.NewHash(p.Url)
+		if !me.Host.IndexPage(p) {
+			logrus.Warnf("No attributes collected for %s", p.Url)
 			break
 		}
-		if !host.IndexPage(p) {
-			// @TODO Move file from /tmp/website-indexer/queued
-			//                   to /tmp/website-indexer/error
-			break
-		}
-		// @TODO Move file from /tmp/website-indexer/queued
-		//                   to /tmp/website-indexer/indexed
-		//                Write /tmp/website-indexer/indexed/{ha}/{sh}/{hash}/json
-
 		// Reset pause
 		me.Config.OnErrPause = config.InitialPause
 	}
 }
 
-func (me *Crawler) onLink(pb *pages.Buffer, p *pages.Page, e *global.HtmlElement) {
+func (me *Crawler) onLink(e *global.HtmlElement) {
 	for range only.Once {
 		if !me.HasElementRel(e, global.LinkElemsType) {
 			break
 		}
-		url := pages.NewUrl(e.Attr("href"), p.GetUrl())
-		p.AddHeader(e.Attr("rel"), url.String())
+		me.Page.AddHeader(
+			e.Attr("rel"),
+			e.Request.AbsoluteURL(e.Attr("href")),
+		)
 	}
 }
 
-func (me *Crawler) onTitle(pb *pages.Buffer, p *pages.Page, e *global.HtmlElement) {
+func (me *Crawler) onTitle(e *global.HtmlElement) {
 	texts := strings.Split(e.Text+"|", "|")
-	p.Title = strings.TrimSpace(texts[0])
+	me.Page.Title = strings.TrimSpace(texts[0])
 }
 
-func (me *Crawler) onA(pb *pages.Buffer, p *pages.Page, e *global.HtmlElement) {
+func (me *Crawler) onA(e *global.HtmlElement) {
 	for range only.Once {
-		if pages.GetRelativeness(e.Attr("href")) != pages.AbsoluteUrl {
-			referer := p.GetUrl()
-			noop(referer)
-		}
-		url := pages.NewUrl(e.Attr("href"), p.GetUrl())
-		if url == nil {
+		u := e.Request.AbsoluteURL(e.Attr("href"))
+		if !pages.IsIndexable(u) {
 			break
 		}
-		me.requestVisit(pb, url, e)
+		me.requestVisit(u, e)
 	}
 }
 
-func (me *Crawler) onIFrame(pb *pages.Buffer, p *pages.Page, e *global.HtmlElement) {
+func (me *Crawler) onIFrame(e *global.HtmlElement) {
 	for range only.Once {
-		if pages.GetRelativeness(e.Attr("src")) != pages.AbsoluteUrl {
-			referer := p.GetUrl()
-			noop(referer)
-		}
-		url := pages.NewUrl(e.Attr("src"), p.GetUrl())
-		if url == nil {
+		u := e.Request.AbsoluteURL(e.Attr("src"))
+		if !pages.IsIndexable(u) {
 			break
 		}
-		me.requestVisit(pb, url, e)
+		me.requestVisit(u, e)
 	}
 }
 
-func (me *Crawler) onMeta(pb *pages.Buffer, p *pages.Page, e *global.HtmlElement) {
+func (me *Crawler) onMeta(e *global.HtmlElement) {
 	for range only.Once {
 		if !me.HasElementMeta(e) {
 			break
 		}
-		p.AddHeader(
+		me.Page.AddHeader(
 			e.Attr(global.MetaName),
 			e.Attr(global.MetaContent),
 		)
 	}
 }
 
-func (me *Crawler) onBody(pb *pages.Buffer, p *pages.Page, e *global.HtmlElement) {
-	p.Body = append(p.Body, pages.NewElement(e).GetHtml())
+func (me *Crawler) onBody(e *global.HtmlElement) {
+	me.Page.Body = append(
+		me.Page.Body,
+		pages.NewElement(e).GetHtml(),
+	)
 }
 
-func (me *Crawler) requestVisit(pb *pages.Buffer, url *pages.Url, e *global.HtmlElement) {
+func (me *Crawler) requestVisit(url global.Url, e *global.HtmlElement) {
 	for range only.Once {
-		persist.QueuedUrl(me.Config, url)
-		err := e.Request.Visit(url.GetUrl())
+		//if ! persist.QueueUrl(me.Config, url) {
+		//	break
+		//}
+		err := me.AddUrl(url)
 		if err != nil {
 			switch err.Error() {
 			case "URL already visited":

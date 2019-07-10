@@ -86,21 +86,19 @@ func GetQueuedUrls(cfg *config.Config) (global.Urls, error) {
 	return queued, err
 }
 
-func QueuedUrl(cfg *config.Config, url *pages.Url) (found bool) {
-	for range only.Once {
-
-		fp, err := GetSubdirFilepath(cfg, QueuedDir, url)
-		if err != nil {
-			break
-		}
-		b := []byte(url.GetUrl())
-		if WriteFile(fp, b, CannotExist) != nil {
-			found = true
-			break
-		}
-	}
-	return found
-}
+//func QueueUrl(cfg *config.Config, url global.Url) (found bool) {
+//	for range only.Once {
+//		fp, err := GetSubdirFilepath(cfg, QueuedDir, url)
+//		if err != nil {
+//			break
+//		}
+//		if WriteFile(fp, []byte(url), CannotExist) != nil {
+//			break
+//		}
+//		found = true
+//	}
+//	return found
+//}
 
 func IndexedPage(cfg *config.Config, page *pages.Page) (err error) {
 	return Persist(cfg, IndexedDir, page)
@@ -160,16 +158,23 @@ func WriteFile(fp global.Filepath, content []byte, exists Existence) (err error)
 	return err
 }
 
-func GetUrlFilename(url *pages.Url) (fn global.Filename, err error) {
-	h := url.Hash()
-	fn, err = template.Expand(map[string]interface{}{
-		"hash": h,
-	})
-	if err != nil {
-		logrus.Errorf("unable to expand template '%s' with hash='%s'",
-			JsonFileTemplate,
-			h,
-		)
+func GetUrlFilename(url global.Url) (fn global.Filename, err error) {
+	for range only.Once {
+		if !pages.IsIndexable(url) {
+			err = fmt.Errorf("the URL '%s' is not an indexable URL", url)
+			break
+		}
+		h := pages.NewHash(url)
+		fn, err = template.Expand(map[string]interface{}{
+			"hash": h,
+		})
+		if err != nil {
+			logrus.Errorf("unable to expand template '%s' with hash='%s'",
+				JsonFileTemplate,
+				h,
+			)
+			break
+		}
 	}
 	return fn, err
 }
@@ -194,7 +199,7 @@ func GetSubdir(cfg *config.Config, subdir global.Dir) (d global.Dir) {
 	)
 }
 
-func GetSubdirFilepath(cfg *config.Config, subdir global.Dir, url *pages.Url) (fp global.Filepath, err error) {
+func GetSubdirFilepath(cfg *config.Config, subdir global.Dir, url global.Url) (fp global.Filepath, err error) {
 	for range only.Once {
 		var fn global.Filename
 		fn, err = GetUrlFilename(url)
@@ -208,4 +213,12 @@ func GetSubdirFilepath(cfg *config.Config, subdir global.Dir, url *pages.Url) (f
 		)
 	}
 	return fp, err
+}
+
+func GetDbFilepath(cfg *config.Config) global.Filepath {
+	return fmt.Sprintf("%s%c%s",
+		cfg.DataDir,
+		os.PathSeparator,
+		SqliteDbFilename,
+	)
 }

@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"github.com/gearboxworks/go-status/only"
 	"github.com/spf13/cobra"
 	"website-indexer/config"
 	"website-indexer/crawler"
@@ -19,11 +18,8 @@ var CrawlCmd = &cobra.Command{
 	Short: "Crawl a website to generate an index",
 	PreRun: func(cmd *cobra.Command, args []string) {
 	},
-	RunE: func(cmd *cobra.Command, args []string) (err error) {
-		for range only.Once {
-			crawler.NewCrawler(config.LoadConfig()).Crawl()
-		}
-		return err
+	Run: func(cmd *cobra.Command, args []string) {
+		crawler.NewCrawler(config.LoadConfig()).Crawl().Close()
 	},
 }
 
