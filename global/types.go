@@ -26,14 +26,29 @@ type Urls = []Url
 type UrlPaths = []UrlPath
 type Filepaths = []Filepath
 type (
+	Name = string
+
+	Domain   = string
+	Port     = string
 	Url      = string
 	UrlPath  = string
+	Fragment = string
 	Dir      = string
 	Path     = string
 	Filename = string
 	Filepath = string
 	Entry    = string
 
-	HtmlName = string
-	Content  = string
+	HtmlName  = string
+	Content   = string
+	Sql       = string
+	Tablename = Name
 )
+type Protocol string
+
+const (
+	HttpScheme  Protocol = "http"
+	HttpsScheme Protocol = "https"
+)
+
+type UnixTime = int64

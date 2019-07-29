@@ -7,6 +7,7 @@ import (
 	"github.com/jtacoma/uritemplates"
 	"github.com/sirupsen/logrus"
 	"io/ioutil"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -18,9 +19,56 @@ import (
 
 var template *uritemplates.UriTemplate
 
+func noop(i ...interface{}) interface{} { return i }
+
 func init() {
 	template, _ = uritemplates.Parse(JsonFileTemplate)
 }
+
+func getUrlDomainAndPort(u global.Url) (d global.Domain, p global.Port, err error) {
+	for range only.Once {
+		uptr, err := url.Parse(u)
+		if err != nil {
+			err = fmt.Errorf("unable to parse domain and port from URL '%s'", u)
+			break
+		}
+		d = uptr.Hostname()
+		p = uptr.Port()
+		if p == "" {
+			p = "80"
+		}
+	}
+	return d, p, err
+}
+
+func getUrlPath(u global.Url) (p global.UrlPath, err error) {
+	for range only.Once {
+		uptr, err := url.Parse(u)
+		if err != nil {
+			err = fmt.Errorf("unable to parse path from URL '%s'", u)
+			break
+		}
+		p = uptr.Path
+	}
+	return p, err
+}
+
+func resourceIsNil(res *Resource, where string) bool {
+	if res == nil {
+		logrus.Errorf("resource nil in %s", where)
+		return true
+	}
+	return false
+}
+
+func hostIsNil(host *Host, where string) bool {
+	if host == nil {
+		logrus.Errorf("host nil in %s", where)
+		return true
+	}
+	return false
+}
+
 func HasQueuedUrls(cfg *config.Config) (found bool) {
 	for range only.Once {
 		qsd := GetQueuedSubdir(cfg)

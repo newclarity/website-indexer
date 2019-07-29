@@ -25,24 +25,29 @@ const (
 	PauseIncrease float64       = 1.1
 )
 const (
+	DefaultRevisit  = "1d"
 	TimeoutErr      = "net/http: request canceled while waiting for connection (Client.Timeout exceeded while awaiting headers)"
 	UnsuccessfulErr = "All hosts have been contacted unsuccessfully"
 )
 
+type DurationString = string
+
 type Config struct {
-	AppId         string                `json:"app_id"`
-	ApiKey        string                `json:"api_key"`
-	IndexName     string                `json:"index"`
-	Domain        string                `json:"domain"`
-	SearchAttrs   global.Strings        `json:"search_attrs"`
-	UrlPatterns   UrlPatterns           `json:"url_patterns"`
-	ElementsIndex global.ElemsTypeIndex `json:"elements"`
-	LookupIndex   global.LookupIndex    `json:"ignore"`
-	DataDir       global.Dir            `json:"data_dir"`
-	CacheDir      global.Dir            `json:"cache_dir"`
-	HomeDir       global.Dir            `json:"-"`
-	ConfigDir     global.Dir            `json:"-"`
-	OnErrPause    time.Duration         `json:"-"`
+	AppId           string                `json:"app_id"`
+	ApiKey          string                `json:"api_key"`
+	IndexName       string                `json:"index"`
+	Domain          string                `json:"domain"`
+	SearchAttrs     global.Strings        `json:"search_attrs"`
+	UrlPatterns     UrlPatterns           `json:"url_patterns"`
+	ElementsIndex   global.ElemsTypeIndex `json:"elements"`
+	LookupIndex     global.LookupIndex    `json:"ignore"`
+	DataDir         global.Dir            `json:"data_dir"`
+	CacheDir        global.Dir            `json:"cache_dir"`
+	Revisit         DurationString        `json:"revisit"`
+	RevisitDuration time.Duration         `json:"-"`
+	HomeDir         global.Dir            `json:"-"`
+	ConfigDir       global.Dir            `json:"-"`
+	OnErrPause      time.Duration         `json:"-"`
 }
 
 func LoadConfig() *Config {
@@ -51,7 +56,7 @@ func LoadConfig() *Config {
 	}
 	cfg.HomeDir = getHomeDir()
 	cfg.ConfigDir = cfg.expandConfigDir()
-	b := cfg.ensureConfigExists()
+	b := cfg.loadConfigFile()
 	err := json.Unmarshal(b, &cfg)
 	if err != nil {
 		log.Fatalf("Config file '%s' cannot be processed. It is likely invalid JSON or is not using the correct schema: %s.",
@@ -71,17 +76,29 @@ func LoadConfig() *Config {
 	if cfg.CacheDir == "" {
 		cfg.CacheDir = getCacheDir()
 	}
-	cfg.LookupIndex = make(global.LookupIndex, len(cfg.ElementsIndex))
-	for typ, es := range cfg.ElementsIndex {
+	if cfg.Revisit == "" {
+		cfg.Revisit = DefaultRevisit
+	}
+	cfg.RevisitDuration, err = time.ParseDuration(cfg.Revisit)
+	if err != nil {
+		logrus.Errorf("unable to parse revisit duration '%s': %s", cfg.Revisit, err)
+		cfg.RevisitDuration, _ = time.ParseDuration(DefaultRevisit)
+	}
+	cfg.InitLookupIndex()
+	cfg.OnErrPause = InitialPause
+	return &cfg
+}
+
+func (me *Config) InitLookupIndex() {
+	me.LookupIndex = make(global.LookupIndex, len(me.ElementsIndex))
+	for typ, es := range me.ElementsIndex {
 		lookup := make(global.LookupMap, len(es))
 		for _, e := range es {
 			lookup[e] = true
 		}
-		cfg.LookupIndex[typ] = lookup
+		me.LookupIndex[typ] = lookup
 	}
-	cfg.ElementsIndex = nil
-	cfg.OnErrPause = InitialPause
-	return &cfg
+	me.ElementsIndex = nil
 }
 
 func (me *Config) GetFilepath() global.Filepath {
@@ -142,7 +159,7 @@ func (me *Config) expandConfigDir() global.Filepath {
 	return cd
 }
 
-func (me *Config) ensureConfigExists() (b []byte) {
+func (me *Config) loadConfigFile() (b []byte) {
 	var isnew bool
 	var err error
 	var f *os.File
@@ -153,7 +170,7 @@ func (me *Config) ensureConfigExists() (b []byte) {
 			if err != nil {
 				log.Fatalf("Config file '%s' exists but cannot be read: %s.", fp, err)
 			}
-			if string(c) == defaultConfig() {
+			if string(c) == DefaultJson() {
 				isnew = true
 			}
 			b = []byte(c)
@@ -170,7 +187,7 @@ func (me *Config) ensureConfigExists() (b []byte) {
 			log.Fatalf("Cannot create config file '%s'; Check permissions: %s.", fp, err)
 		}
 		var n int
-		dc := defaultConfig()
+		dc := DefaultJson()
 		n, err = f.WriteString(dc)
 		if err != nil || n != len(dc) {
 			log.Fatalf("Cannot create config file '%s'; Check permissions: %s.", fp, err)
@@ -262,7 +279,7 @@ func getHomeDir() (hd global.Dir) {
 	return hd
 }
 
-func defaultConfig() string {
+func DefaultJson() string {
 	return `{
    "index_host": "algolia_or_elastic"
    "app_id": "ABC123XYZ9",
@@ -270,6 +287,7 @@ func defaultConfig() string {
    "index": "text_Example",
    "domain": "example.com",
    "data_dir": "~/Desktop/website-indexer",
+   "revisit": "1d",
    "search_attrs": [
       "article",
       "body",

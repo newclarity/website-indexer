@@ -12,7 +12,7 @@ func NewObject(obj global.Object) *Object {
 	return &o
 }
 
-func (me *Object) AppendProperties(propMap global.StringMap) {
+func (me *Object) AppendProps(propMap global.StringMap) {
 	for n, v := range propMap {
 		me.Object[n] = v
 	}

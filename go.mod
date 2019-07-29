@@ -12,14 +12,14 @@ require (
 	github.com/hashicorp/golang-lru v0.5.1
 	github.com/jtacoma/uritemplates v1.0.0
 	github.com/kennygrant/sanitize v1.2.4 // indirect
-	github.com/mattn/go-sqlite3 v1.10.0 // indirect
+	github.com/mattn/go-sqlite3 v1.10.0
 	github.com/saintfish/chardet v0.0.0-20120816061221-3af4cd4741ca // indirect
 	github.com/sirupsen/logrus v1.4.1
 	github.com/spf13/cobra v0.0.5
 	github.com/stretchr/testify v1.3.0 // indirect
 	github.com/temoto/robotstxt v0.0.0-20180810133444-97ee4a9ee6ea // indirect
-	github.com/velebak/colly-sqlite3-storage v0.0.0-20190425160637-c76683d5163d
 	golang.org/x/net v0.0.0-20190514140710-3ec191127204
 	golang.org/x/sync v0.0.0-20190423024810-112230192c58 // indirect
+	golang.org/x/xerrors v0.0.0-20190717185122-a985d3407aa7 // indirect
 	google.golang.org/appengine v1.6.0 // indirect
 )

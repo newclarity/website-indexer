@@ -47,12 +47,12 @@ func (me *Algolia) IndexPage(p *pages.Page) bool {
 			"body":     p.Body.String(),
 		})
 
-		o.AppendProperties(p.HeaderMap.ExtractStringMap())
+		o.AppendProps(p.HeaderMap.ExtractStringMap())
 
-		o.AppendProperties(p.ElementsMap.ExtractStringMap())
+		o.AppendProps(p.ElementsMap.ExtractStringMap())
 
 		ps := me.Config.UrlPatterns.ExtractStringMap(p.Url)
-		o.AppendProperties(ps)
+		o.AppendProps(ps)
 		_, err = me.Index.AddObject(o.Object)
 		if err != nil {
 			me.Config.OnFailedVisit(err, p.Url, "adding page to index")

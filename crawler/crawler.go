@@ -5,10 +5,11 @@ import (
 	"github.com/gearboxworks/go-status/only"
 	"github.com/gocolly/colly"
 	"github.com/gocolly/colly/debug"
+	"github.com/gocolly/colly/storage"
 	"github.com/sirupsen/logrus"
-	"github.com/velebak/colly-sqlite3-storage/colly/sqlite3"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
 	"time"
 	"website-indexer/config"
@@ -40,7 +41,7 @@ type Crawler struct {
 	*config.Config
 	Collector *colly.Collector
 	Host      hosters.IndexHoster
-	Storage   *sqlite3.Storage
+	Storage   persist.Storager
 	Page      *pages.Page
 }
 
@@ -63,11 +64,12 @@ func NewCrawler(cfg *config.Config) (c *Crawler) {
 		}
 
 		fp := persist.GetDbFilepath(cfg)
-		c.Storage = &sqlite3.Storage{
+		c.Storage = &persist.Storage{
+			Config:   cfg,
 			Filename: fp,
 		}
 
-		err := cc.SetStorage(c.Storage)
+		err := cc.SetStorage(c.Storage.(storage.Storage))
 		if err != nil {
 			logrus.Fatalf("Unable to open crawl DB: %s", fp, err)
 			break
@@ -153,24 +155,44 @@ func (me *Crawler) QueueUrl(url global.Url) {
 
 func (me *Crawler) VisitQueued() {
 	var err error
+	var retries int
 	for {
+		if err != nil {
+			logrus.Errorf("unable to visit queued resources: %s", err)
+			err = nil
+			if retries > 3 {
+				logrus.Fatal("too many errors; terminating")
+				os.Exit(1)
+			}
+			retries++
+		}
 		var b []byte
 		b, err = me.Storage.GetRequest()
 		if err != nil {
 			break
 		}
-		c := me.Collector
-		var r *colly.Request
-		r, err = c.UnmarshalRequest(b)
-		if err != nil || r == nil {
+		if b == nil {
+			break
+		}
+		var res *persist.Resource
+		res, err = me.Storage.UnmarshalResource(b)
+		if err != nil {
 			continue
 		}
-		err = c.Visit(r.URL.String())
+		var u global.Url
+		u, err = res.Url()
+		if err != nil {
+			continue
+		}
+		err = me.Collector.Visit(u)
 		if err == nil {
 			continue
 		}
-		switch err.Error() {
-		case "Forbidden domain":
+		if err == colly.ErrAlreadyVisited {
+			err = nil
+			continue
+		}
+		if err == colly.ErrForbiddenDomain {
 			err = nil
 			continue
 		}
