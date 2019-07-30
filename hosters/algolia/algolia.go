@@ -2,7 +2,6 @@ package algolia
 
 import (
 	"github.com/algolia/algoliasearch-client-go/algoliasearch"
-	"github.com/gearboxworks/go-status/only"
 	"github.com/sirupsen/logrus"
 	"website-indexer/config"
 	"website-indexer/global"
@@ -39,26 +38,26 @@ func (me *Algolia) Initialize() error {
 
 func (me *Algolia) IndexPage(p *pages.Page) bool {
 	var err error
-	for range only.Once {
-		o := hosters.NewObject(global.Object{
-			"objectID": p.Id.String(),
-			"title":    p.Title,
-			"url":      p.Url,
-			"body":     p.Body.String(),
-		})
-
-		o.AppendProps(p.HeaderMap.ExtractStringMap())
-
-		o.AppendProps(p.ElementsMap.ExtractStringMap())
-
-		ps := me.Config.UrlPatterns.ExtractStringMap(p.Url)
-		o.AppendProps(ps)
-		_, err = me.Index.AddObject(o.Object)
-		if err != nil {
-			me.Config.OnFailedVisit(err, p.Url, "adding page to index")
-			break
-		}
-	}
+	//for range only.Once {
+	//	o := hosters.NewObject(global.Object{
+	//		"objectID": p.Id.String(),
+	//		"title":    p.Title,
+	//		"url":      p.Url,
+	//		"body":     p.Body.String(),
+	//	})
+	//
+	//	o.AppendProps(p.HeaderMap.ExtractStringMap())
+	//
+	//	o.AppendProps(p.ElementsMap.ExtractStringMap())
+	//
+	//	ps := me.Config.UrlPatterns.ExtractStringMap(p.Url)
+	//	o.AppendProps(ps)
+	//	_, err = me.Index.AddObject(o.Object)
+	//	if err != nil {
+	//		me.Config.OnFailedVisit(err, p.Url, "adding page to index")
+	//		break
+	//	}
+	//}
 	return err == nil
 }
 

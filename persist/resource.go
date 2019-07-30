@@ -48,13 +48,12 @@ func (me *Resource) Init(h *Host) (err error) {
 			break
 		}
 		var uptr *url.URL
-		uptr, err = url.Parse(me.url)
+		uptr, err = parseUrl(me.url)
 		if err != nil {
-			err = fmt.Errorf("unable to parse URL '%s'", me.url)
 			break
 		}
 		me.Hash = NewHash(me.url)
-		me.UrlPath = uptr.Path
+		me.UrlPath = getParsedPath(*uptr)
 		me.Fragment = uptr.Fragment
 		me.host = h
 	}
@@ -84,8 +83,17 @@ func (me *Resource) Url() (u global.Url, err error) {
 			}
 			me.host = sh
 		}
+		h := me.host
+		if h.Domain == "" {
+			err = ErrNonIndexableUrl
+			break
+		}
+		if h.Domain == "blank" {
+			err = ErrNonIndexableUrl
+			break
+		}
 		u = fmt.Sprintf("%s/%s",
-			me.host.String(),
+			strings.TrimRight(h.String(), "/"),
 			strings.TrimLeft(me.UrlPath, "/"),
 		)
 		if me.Fragment != "" {

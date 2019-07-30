@@ -26,6 +26,7 @@ type Storager interface {
 	GetRequest() ([]byte, error)
 	LoadResource(Resource) (*Resource, error)
 	UnmarshalResource([]byte) (*Resource, error)
+	DequeueResource(Resource) error
 }
 
 var _ Storager = (*Storage)(nil)
@@ -37,6 +38,14 @@ type Storage struct {
 	Filename string       // Filename indicates the name of the sqlite file to use
 	dbh      *sql.DB      // handle to the db
 	mu       sync.RWMutex // Only used for cookie methods.
+}
+
+func (me *Storage) DequeueResource(res Resource) (err error) {
+	_, err = me.DeleteQueueItemsbyHash(res.Hash)
+	if err != nil {
+		logrus.Errorf("unable to dequeue resource for hash='%d': %s", res.Hash, err)
+	}
+	return err
 }
 
 func (me *Storage) UnmarshalResource(b []byte) (res *Resource, err error) {
@@ -292,8 +301,22 @@ func (me *Storage) Visited(requestID uint64) error {
 }
 
 // IsVisited implements colly/storage.IsVisited()
-func (me *Storage) IsVisited(requestID uint64) (yn bool, err error) {
-	return !me.LoadShouldRevisitByHash(Hash(requestID)), nil
+func (me *Storage) IsVisited(requestID uint64) (vis bool, err error) {
+
+	for range only.Once {
+		h := Hash(requestID)
+		vis = !me.LoadShouldRevisitByHash(h)
+		if vis {
+			break
+		}
+		_, err = me.DeleteQueueItemsbyHash(h)
+		if err != nil {
+			logrus.Errorf("unable to delete from queue for hash='%d': %s", h, err)
+		}
+	}
+
+	return vis, err
+
 }
 
 // SetCookies implements colly/storage..SetCookies()
@@ -375,7 +398,7 @@ func (me *Storage) Cookies(u *url.URL) string {
 //		if err != nil {
 //			break
 //		}
-//		up,err := getUrlPath(u)
+//		up,err := getPathFromUrl(u)
 //		upid,_,err := me.AddUrlPath(up)
 //		if err != nil {
 //			break

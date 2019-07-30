@@ -16,6 +16,7 @@ type Host struct {
 }
 
 func NewHost(u global.Url) (sh *Host) {
+	u, _ = getRootUrl(u)
 	return &Host{
 		url: u,
 	}

@@ -42,6 +42,10 @@ func (me *Storage) InsertHost(host Host) (h *Host, sr sql.Result, err error) {
 
 func (me *Storage) LoadHostIdByUrl(u global.Url) (hostid SqlId, err error) {
 	for range only.Once {
+		u, err = getRootUrl(u)
+		if err != nil {
+			break
+		}
 		r := me.QueryRow(dml[SelectHostByUrlDml], u+"%")
 		var hid int64
 		err = r.Scan(&hid)

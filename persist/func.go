@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/gearboxworks/go-status/only"
 	"github.com/jtacoma/uritemplates"
+	"github.com/mattn/go-sqlite3"
 	"github.com/sirupsen/logrus"
 	"io/ioutil"
 	"net/url"
@@ -25,48 +26,68 @@ func init() {
 	template, _ = uritemplates.Parse(JsonFileTemplate)
 }
 
-func getUrlDomainAndPort(u global.Url) (d global.Domain, p global.Port, err error) {
+func IsSqlUniqueError(err error) (is bool) {
 	for range only.Once {
-		uptr, err := url.Parse(u)
-		if err != nil {
-			err = fmt.Errorf("unable to parse domain and port from URL '%s'", u)
+		err, ok := err.(sqlite3.Error)
+		if !ok {
 			break
 		}
-		d = uptr.Hostname()
-		p = uptr.Port()
-		if p == "" {
-			p = "80"
+		if err.Code != sqlite3.ErrConstraint {
+			break
 		}
+		if err.ExtendedCode != sqlite3.ErrConstraintUnique {
+			break
+		}
+		is = true
 	}
-	return d, p, err
+	return is
 }
 
-func getUrlPath(u global.Url) (p global.UrlPath, err error) {
+func getRootUrl(inurl global.Url) (outurl global.UrlPath, err error) {
 	for range only.Once {
-		uptr, err := url.Parse(u)
+		inptr, err := parseUrl(inurl)
 		if err != nil {
-			err = fmt.Errorf("unable to parse path from URL '%s'", u)
 			break
 		}
-		p = uptr.Path
+		s := inptr.Scheme
+		d := inptr.Hostname()
+		p := inptr.Port()
+		if p != "" && p != "80" {
+			p = fmt.Sprintf(":%s", p)
+		}
+		outurl = fmt.Sprintf("%s://%s%s", s, d, p)
+	}
+	return outurl, err
+}
+
+func parseUrl(u global.Url) (uu *url.URL, err error) {
+	uu, err = url.Parse(u)
+	if err != nil {
+		err = fmt.Errorf("unable to parse URL '%s'", u)
+		logrus.Error(err)
+	}
+	return uu, err
+}
+
+func getPathFromUrl(u global.Url) (p global.UrlPath, err error) {
+	for range only.Once {
+		uptr, err := parseUrl(u)
+		if err != nil {
+			break
+		}
+		p = getParsedPath(*uptr)
 	}
 	return p, err
 }
 
-func resourceIsNil(res *Resource, where string) bool {
-	if res == nil {
-		logrus.Errorf("resource nil in %s", where)
-		return true
+func getParsedPath(uptr url.URL) (p global.UrlPath) {
+	for range only.Once {
+		p = uptr.Path
+		if uptr.RawQuery != "" {
+			p = fmt.Sprintf("%s?%s", p, uptr.RawQuery)
+		}
 	}
-	return false
-}
-
-func hostIsNil(host *Host, where string) bool {
-	if host == nil {
-		logrus.Errorf("host nil in %s", where)
-		return true
-	}
-	return false
+	return p
 }
 
 func HasQueuedUrls(cfg *config.Config) (found bool) {

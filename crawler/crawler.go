@@ -129,6 +129,9 @@ func (me *Crawler) AddUrl(URL string) (err error) {
 		if err != nil {
 			break
 		}
+		if u.Path == "" {
+			u.Path = "/"
+		}
 		r := &colly.Request{
 			URL:    u,
 			Method: "GET",
@@ -181,6 +184,11 @@ func (me *Crawler) VisitQueued() {
 		}
 		var u global.Url
 		u, err = res.Url()
+		if err == persist.ErrNonIndexableUrl {
+			_ = me.Storage.DequeueResource(*res)
+			err = nil
+			continue
+		}
 		if err != nil {
 			continue
 		}
@@ -321,6 +329,7 @@ func (me *Crawler) requestVisit(url global.Url, e *global.HtmlElement) {
 		//if ! persist.QueueUrl(me.Config, url) {
 		//	break
 		//}
+		//fmt.Println("\n"+url)
 		err := me.AddUrl(url)
 		if err != nil {
 			switch err.Error() {

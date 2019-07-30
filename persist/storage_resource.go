@@ -45,12 +45,6 @@ func (me *Storage) InsertResource(res Resource) (r *Resource, sr sql.Result, err
 
 func (me *Storage) LoadResource(res Resource) (r *Resource, err error) {
 	for range only.Once {
-		if !res.Initialized() {
-			err = res.Init(nil)
-		}
-		if err != nil {
-			break
-		}
 		if res.Id != 0 {
 			r, err = me.LoadResourceProps(res)
 		} else {
@@ -74,7 +68,7 @@ func (me *Storage) LoadResourceId(res Resource) (rid SqlId, err error) {
 			break
 		}
 		q := dml[SelectResourceByHashDml]
-		qr := me.QueryRow(q, res.Hash)
+		qr := me.QueryRow(q, int64(res.Hash))
 		err = qr.Scan(&rid)
 		if err != nil {
 			switch err.Error() {

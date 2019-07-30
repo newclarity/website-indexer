@@ -25,6 +25,12 @@ func IsIndexable(u global.Url) (ok bool) {
 		if uu.Scheme == "tel" {
 			break
 		}
+		if uu.Scheme == "about" {
+			break
+		}
+		if uu.Scheme == "mailto" {
+			break
+		}
 		ok = true
 	}
 	return ok
