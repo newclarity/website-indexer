@@ -19,7 +19,7 @@ func (me *Storage) InsertVisited(vis Visited) (v *Visited, sr sql.Result, err er
 			vis.Cookies,
 		)
 		if err != nil {
-			err = fmt.Errorf("unable to insert visited '%d': %s", vis.ResourceHash, err.Error())
+			err = fmt.Errorf("unable to insert visited '%d': %s", vis.ResourceHash, err)
 			logrus.Error(err)
 			break
 		}
@@ -27,11 +27,17 @@ func (me *Storage) InsertVisited(vis Visited) (v *Visited, sr sql.Result, err er
 		var vid int64
 		vid, err = sr.LastInsertId()
 		if err != nil {
-			logrus.Errorf("unable to access inserted ID for visited '%s': %s", vis.ResourceHash, err)
+			err = fmt.Errorf("unable to access inserted ID for visited '%s': %s", vis.ResourceHash, err)
+			logrus.Error(err)
 			break
 		}
 		v.Id = SqlId(vid)
-
+		_, err = me.DeleteQueueItemsbyHash(vis.ResourceHash)
+		if err != nil {
+			err = fmt.Errorf("unable to remove queued item for hash='%d' from queue: %s", vis.ResourceHash, err)
+			logrus.Error(err)
+			break
+		}
 	}
 	return v, sr, err
 }

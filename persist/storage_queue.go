@@ -49,3 +49,11 @@ func (me *Storage) LoadQueueItem() (i *Item, err error) {
 	}
 	return i, err
 }
+func (me *Storage) DeleteQueueItemsbyHash(h Hash) (sr sql.Result, err error) {
+	sr, err = me.ExecSql(dml[DeleteQueueItemsByHashDml], int64(h))
+	if err != nil {
+		err = fmt.Errorf("unable to queue items for has='%d': %s", h, err.Error())
+		logrus.Error(err)
+	}
+	return sr, err
+}

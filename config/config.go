@@ -25,7 +25,7 @@ const (
 	PauseIncrease float64       = 1.1
 )
 const (
-	DefaultRevisit  = "1d"
+	DefaultRevisit  = "24h"
 	TimeoutErr      = "net/http: request canceled while waiting for connection (Client.Timeout exceeded while awaiting headers)"
 	UnsuccessfulErr = "All hosts have been contacted unsuccessfully"
 )
@@ -287,7 +287,7 @@ func DefaultJson() string {
    "index": "text_Example",
    "domain": "example.com",
    "data_dir": "~/Desktop/website-indexer",
-   "revisit": "1d",
+   "revisit": "24h",
    "search_attrs": [
       "article",
       "body",
