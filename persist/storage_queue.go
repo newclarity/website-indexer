@@ -78,10 +78,12 @@ func (me *Storage) LoadQueueItem() (i *Item, err error) {
 		if err != nil {
 			break
 		}
+		i.Id = SqlId(id)
 		i.ResourceHash = Hash(rh)
 	}
 	return i, err
 }
+
 func (me *Storage) DeleteQueueItemsbyHash(h Hash) (sr sql.Result, err error) {
 	sr, err = me.ExecSql(dml[DeleteQueueItemsByHashDml], int64(h))
 	if err != nil {

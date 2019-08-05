@@ -31,12 +31,14 @@ const (
 	SelectQueueItemDml       = "select-queue-item"
 	SelectQueueItemByHashDml = "select-queue-item-by-hash"
 
-	SelectResourceDml       = "select-resource"
-	SelectResourceByIdDml   = "select-resource-by-id"
-	SelectResourceByHashDml = "select-resource-by-hash"
-	SelectHostByUrlDml      = "select-host-by-url"
-	SelectHostByIdDml       = "select-host-by-id"
-	SelectHostBySDPDml      = "select-host-by-sdp"
+	SelectResourceCountDml     = "select-resource-count"
+	SelectResourceCountByIdDml = "select-resource-count-by-id"
+	SelectResourceDml          = "select-resource"
+	SelectResourceByIdDml      = "select-resource-by-id"
+	SelectResourceByHashDml    = "select-resource-by-hash"
+	SelectHostByUrlDml         = "select-host-by-url"
+	SelectHostByIdDml          = "select-host-by-id"
+	SelectHostBySDPDml         = "select-host-by-sdp"
 
 	SelectVisitedStatsByHashDml = "select-visited-stats-by-hash"
 
@@ -52,16 +54,19 @@ const (
 type sqlMap map[global.Name]global.Sql
 
 var dml = sqlMap{
-	SelectResourceDml:  "SELECT id,hash,host_id,urlpath FROM resources",
-	SelectQueueItemDml: "SELECT IFNULL(id,0) AS id,IFNULL(resource_hash,0) AS resource_hash FROM queue",
+	SelectResourceDml:      "SELECT id,hash,host_id,urlpath FROM resources",
+	SelectResourceCountDml: "SELECT COUNT() FROM resources",
+	SelectQueueItemDml:     "SELECT IFNULL(id,0) AS id,IFNULL(resource_hash,0) AS resource_hash FROM queue",
 }
 
 func init() {
 	dml = mergesqlmap(dml, sqlMap{
 		SelectQueueItemByHashDml: dml[SelectQueueItemDml] + " WHERE resource_hash = ?",
+		SelectQueueCountDml:      " SELECT COUNT(*) FROM queue",
 
-		SelectResourceByIdDml:   dml[SelectResourceDml] + " WHERE id = ?",
-		SelectResourceByHashDml: dml[SelectResourceDml] + " WHERE hash = ?",
+		SelectResourceByIdDml:      dml[SelectResourceDml] + " WHERE id = ?",
+		SelectResourceByHashDml:    dml[SelectResourceDml] + " WHERE hash = ?",
+		SelectResourceCountByIdDml: dml[SelectResourceDml] + " WHERE id = ?",
 
 		SelectHostByIdDml:  "SELECT id,scheme,domain,port FROM hosts WHERE id = ?",
 		SelectHostByUrlDml: "SELECT id FROM hosts WHERE scheme || '://' || domain || CASE WHEN port IN (0,80) THEN '' ELSE ':'||CAST(port AS text) END || '/' LIKE ?",

@@ -7,6 +7,7 @@ import (
 	"github.com/gearboxworks/go-status/only"
 	"github.com/gocolly/colly"
 	"github.com/gocolly/colly/queue"
+	"github.com/mattn/go-sqlite3"
 	"github.com/sirupsen/logrus"
 	"log"
 	"net/url"
@@ -105,6 +106,13 @@ func (me *Storage) AddRequest(b []byte) (err error) {
 		if err != nil {
 			logrus.Errorf("unable to unmarshal request '%s': %s", string(b), err)
 		}
+		var du global.Url
+		du, err = url.QueryUnescape(r.Url)
+		if err != nil {
+			logrus.Errorf("unable to unescape URL '%s': %s", r.Url, err)
+			break
+		}
+		r.Url = du
 		_, _, err = me.AddResource(r.Url)
 		if err != nil {
 			logrus.Errorf("unable to add resource '%s': %s", r.Url, err)
@@ -133,6 +141,16 @@ const (
 func (me *Storage) AddResource(u global.Url) (resid SqlId, sr SqlResult, err error) {
 	for range only.Once {
 		var r *Resource
+		if strings.Contains(string([]byte(u)[8:]), ":") {
+			noop()
+		}
+		var du global.Url
+		du, err = url.QueryUnescape(u)
+		if err != nil {
+			sr = RecordAddFailed
+			break
+		}
+		u = du
 		r, err = me.LoadResourceByUrl(u)
 		if err != nil {
 			break
@@ -141,8 +159,18 @@ func (me *Storage) AddResource(u global.Url) (resid SqlId, sr SqlResult, err err
 			sr = RecordExisted
 			break
 		}
-		r.url = u
-		err = r.Init(nil)
+		r.url = du
+		var hid SqlId
+		hid, _, err = me.AddHost(u)
+		if err != nil {
+			break
+		}
+		var h *Host
+		h, err = me.LoadHostById(hid)
+		if err != nil {
+			break
+		}
+		err = r.Init(h)
 		if err != nil {
 			break
 		}
@@ -204,6 +232,7 @@ func (me *Storage) GetRequest() (blob []byte, err error) {
 		if err != nil {
 			return nil, err
 		}
+
 	}
 	return blob, nil
 }
@@ -371,6 +400,23 @@ func (me *Storage) Cookies(u *url.URL) string {
 	return cookies
 }
 
+func matchesSqlite3ErrorCodes(err error, code sqlite3.ErrNo, excode sqlite3.ErrNoExtended) (ok bool) {
+	for range only.Once {
+		var se sqlite3.Error
+		se, ok = err.(sqlite3.Error)
+		if !ok {
+			break
+		}
+		if se.Code != code {
+			break
+		}
+		if se.ExtendedCode != excode {
+			break
+		}
+	}
+	return ok
+}
+
 //func (me *Storage) AddUrlPath(su *Resource) (hostid int64, sr SqlResult, err error) {
 //	for range only.Once {
 //		hash := NewHash(su.UrlPath)
@@ -417,23 +463,4 @@ func (me *Storage) Cookies(u *url.URL) string {
 //	//	return err
 //	//}
 //	return nil
-//}
-//func matchesCodes(err error, codes []int) (ok bool) {
-//	for range only.Once {
-//		var se sqlite3.Error
-//		se, ok = err.(sqlite3.Error)
-//		if !ok {
-//			break
-//		}
-//		if len(codes) != 2 {
-//			break
-//		}
-//		if se.Code != sqlite3.ErrNo(codes[0]) {
-//			break
-//		}
-//		if se.ExtendedCode != sqlite3.ErrNoExtended(codes[1]) {
-//			break
-//		}
-//	}
-//	return ok
 //}

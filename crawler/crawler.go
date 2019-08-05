@@ -177,6 +177,10 @@ func (me *Crawler) VisitQueued() {
 		if b == nil {
 			break
 		}
+		if string(b) == "null" {
+			logrus.Errorf("request to get queued item returned 'null':", err)
+			continue
+		}
 		var res *persist.Resource
 		res, err = me.Storage.UnmarshalResource(b)
 		if err != nil {
@@ -326,10 +330,9 @@ func (me *Crawler) onBody(e *global.HtmlElement) {
 
 func (me *Crawler) requestVisit(url global.Url, e *global.HtmlElement) {
 	for range only.Once {
-		//if ! persist.QueueUrl(me.Config, url) {
-		//	break
-		//}
-		//fmt.Println("\n"+url)
+		if !pages.IsIndexable(url) {
+			break
+		}
 		err := me.AddUrl(url)
 		if err != nil {
 			switch err.Error() {

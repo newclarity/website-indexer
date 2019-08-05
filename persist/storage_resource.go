@@ -10,21 +10,23 @@ import (
 
 func (me *Storage) InsertResource(res Resource) (r *Resource, sr sql.Result, err error) {
 	for range only.Once {
-		var u global.Url
-		u, err = res.Url()
-		if err != nil {
-			break
+		if res.host == nil {
+			res.host, err = me.LoadHostByResource(res)
+			if err != nil {
+				break
+			}
 		}
-		var hid SqlId
-		hid, _, err = me.AddHost(u)
-		if err != nil {
+		if me.HasResource(res) {
 			break
 		}
 		sr, err = me.ExecSql(dml[InsertResourceDml],
 			int64(res.Hash),
-			int64(hid),
+			int64(res.host.Id),
 			res.UrlPath,
 		)
+		//if matchesSqlite3ErrorCodes(err,sqlite3.ErrConstraint,sqlite3.ErrConstraintUnique) {
+		//	break
+		//}
 		if err != nil {
 			err = fmt.Errorf("unable to insert request '%s': %s", res.UrlPath, err.Error())
 			logrus.Error(err)
@@ -47,17 +49,25 @@ func (me *Storage) LoadResource(res Resource) (r *Resource, err error) {
 	for range only.Once {
 		if res.Id != 0 {
 			r, err = me.LoadResourceProps(res)
-		} else {
-			var rid SqlId
-			rid, err = me.LoadResourceId(res)
-			res.Id = rid
-			r = &res
+			break
 		}
+		var rid SqlId
+		rid, err = me.LoadResourceId(res)
 		if err != nil {
 			break
 		}
+		res.Id = rid
+		r = &res
 	}
 	return r, err
+}
+
+func (me *Storage) HasResource(res Resource) (ok bool) {
+	q := dml[SelectResourceCountByIdDml]
+	qr := me.QueryRow(q, res.Id)
+	var cnt uint64
+	err := qr.Scan(&cnt)
+	return err == nil && cnt > 0
 }
 
 func (me *Storage) LoadResourceId(res Resource) (rid SqlId, err error) {
@@ -106,7 +116,8 @@ func (me *Storage) LoadResourceProps(res Resource) (r *Resource, err error) {
 		if err != nil {
 			switch err {
 			case sql.ErrNoRows:
-				err = nil
+				//err = nil
+				break
 			default:
 				logrus.Errorf("unable to select for resource '%s': %s", res.String(), err.Error())
 				break

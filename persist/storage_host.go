@@ -40,6 +40,21 @@ func (me *Storage) InsertHost(host Host) (h *Host, sr sql.Result, err error) {
 	return h, sr, err
 }
 
+func (me *Storage) LoadHostByUrl(u global.Url) (h *Host, err error) {
+	for range only.Once {
+		var hid SqlId
+		hid, err = me.LoadHostIdByUrl(u)
+		if err != nil {
+			break
+		}
+		h, err = me.LoadHostById(hid)
+		if err != nil {
+			break
+		}
+	}
+	return h, err
+}
+
 func (me *Storage) LoadHostIdByUrl(u global.Url) (hostid SqlId, err error) {
 	for range only.Once {
 		u, err = getRootUrl(u)
@@ -151,6 +166,29 @@ func (me *Storage) LoadHostProps(host Host) (h *Host, err error) {
 		h.Scheme = s
 		h.Port = p
 		h.url = h.Url()
+	}
+	return h, err
+}
+
+func (me *Storage) LoadHostByResource(res Resource) (h *Host, err error) {
+	var hid SqlId
+	for range only.Once {
+		if res.host != nil {
+			hid = res.Host().Id
+			break
+		}
+		var u global.Url
+		u, err = res.Url()
+		if err != nil {
+			break
+		}
+		hid, _, err = me.AddHost(u)
+		if err != nil {
+			break
+		}
+	}
+	if err == nil {
+		h, err = me.LoadHostById(hid)
 	}
 	return h, err
 }

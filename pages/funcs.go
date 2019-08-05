@@ -4,6 +4,7 @@ import (
 	"github.com/gearboxworks/go-status/only"
 	"github.com/sirupsen/logrus"
 	"net/url"
+	"strings"
 	"website-indexer/global"
 )
 
@@ -19,7 +20,13 @@ func IsIndexable(u global.Url) (ok bool) {
 			logrus.Warnf("unable to parse URL '%s'", u)
 			break
 		}
-		if len(uu.Path) != 0 && uu.Path[0] == '#' {
+		if len(uu.Path) == 0 {
+			break
+		}
+		if uu.Path[0] == '#' {
+			break
+		}
+		if strings.Contains(uu.Path, "{") && strings.Contains(uu.Path, "}") {
 			break
 		}
 		if uu.Scheme == "tel" {
